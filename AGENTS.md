@@ -10,7 +10,7 @@ Read README.md and this file first, then inspect the current code and Git status
 - Alternate frontend: https://checkthisout.general-zodd.workers.dev/
 - Recommendation API: https://checkthisout-recommendations.general-zodd.workers.dev
 - Plain JavaScript modules, HTML and CSS; no frontend framework or bundler. scripts/build.mjs copies an explicit public asset allowlist into dist, including callback.html and .nojekyll. Never publish the whole checkout.
-- GitHub Actions (.github/workflows/test.yml) tests, builds and deploys main to Pages. PRs test/build only. Cloudflare frontend and backend deployments are separate, manual operations.
+- GitHub Actions (.github/workflows/test.yml) tests, builds and deploys the same main artifact to Pages and the Cloudflare frontend in independent jobs. PRs test/build only. The backend has a separate manual-only GitHub workflow (deploy-backend.yml); it never deploys on pushes.
 - app.js handles UI, profile persistence, backups and batch actions; spotify.js handles PKCE/auth/API writes; history.js reads Spotify context; discovery.js calls the backend; recommendations.js handles matching/exclusions; backend/worker.mjs handles authorization, model calls, usage and durable request state.
 
 ## Development and verification
@@ -35,8 +35,8 @@ pnpm build
 
 ## Deployment and credentials
 
-- Push main to publish the primary frontend after successful CI. Root pnpm deploy instead updates the alternate Cloudflare frontend; it does NOT publish Pages.
-- Backend: cd backend, install dependencies as needed, then pnpm exec wrangler deploy. Read existing ignored backend/wrangler.toml before changing configuration. Preserve the BUDGET Durable Object binding, migrations and stored counters/results.
+- Push main to publish both frontends after successful CI. Cloudflare requires the CLOUDFLARE_API_TOKEN repository Actions secret; a missing token fails that job explicitly. workflow_dispatch can retry deployment after secret setup. Root pnpm deploy is a manual alternative for the Cloudflare frontend only.
+- Backend: use Actions → Deploy recommendation backend → Run workflow on main. CI uses backend/wrangler.ci.toml with --keep-vars to retain production variables and existing secrets. Alternatively, cd backend, install dependencies as needed, then pnpm exec wrangler deploy. Read existing ignored backend/wrangler.toml before changing configuration. Preserve the BUDGET Durable Object binding, migrations and stored counters/results.
 - OPENAI_API_KEY is a Cloudflare secret, never frontend configuration. backend/wrangler.toml is deliberately ignored; backend/wrangler.example.toml is the shareable template. Do not print tokens or commit secrets, backups, private listening lists, screenshots or investigation notes.
 - Public Spotify client ID in spotify.js is intentional. OAuth uses PKCE, not a Spotify client secret. Do not copy credentials from the user's unrelated Python playlist script.
 - Registered callbacks must include localhost /callback, alternate Cloudflare /callback, and https://bishopofbathandwells.github.io/CheckThisOut/callback.html. Keep callbacks belonging to other tools. The user was asked to add the Pages callback; successful real-user sign-in there was not confirmed in this chat.

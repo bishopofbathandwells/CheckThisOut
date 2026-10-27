@@ -1,0 +1,15 @@
+# CI updates code and preserves existing production vars via --keep-vars.
+# OPENAI_API_KEY remains a Cloudflare secret, never a GitHub/frontend value.
+name = "checkthisout-recommendations"
+main = "worker.mjs"
+compatibility_date = "2026-10-26"
+workers_dev = true
+keep_vars = true
+
+[[durable_objects.bindings]]
+name = "BUDGET"
+class_name = "RecommendationBudget"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RecommendationBudget"]

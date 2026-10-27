@@ -43,9 +43,13 @@ On Windows, browser tests default to installed Edge; elsewhere they use Playwrig
 
 ## Publish the PWA
 
-Push to `main` in https://github.com/bishopofbathandwells/CheckThisOut. GitHub Actions installs dependencies, runs unit/browser tests, builds only the public assets, and publishes the build to GitHub Pages. Pull requests run tests/build without publishing. GitHub Pages must use GitHub Actions as its publishing source.
+Push to `main` in https://github.com/bishopofbathandwells/CheckThisOut. GitHub Actions installs dependencies, runs unit/browser tests, builds only the public assets, and publishes the same build to GitHub Pages and the alternate Cloudflare frontend. Pull requests run tests/build without publishing. GitHub Pages must use GitHub Actions as its publishing source.
 
 The build copies an explicit allowlist into dist/. Never publish the project folder itself: it may contain local backups and development files. The OpenAI backend remains on Cloudflare and is deployed separately.
+
+Cloudflare CI authentication: create a Cloudflare API token with Workers Editor access scoped to the existing `checkthisout` frontend Worker (or the Edit Cloudflare Workers template scoped to this account). Store its value as the repository Actions secret `CLOUDFLARE_API_TOKEN` under Settings → Secrets and variables → Actions. The account ID in the workflow is public configuration. Do not put the token in source files or chat. The token does not need the OpenAI API key.
+
+Both deployment jobs require the successful test/build job and run independently. A missing or expired Cloudflare token fails the Cloudflare job explicitly while allowing Pages to publish. After adding or replacing the secret, rerun the failed job or use Run workflow on main. Pull requests do not deploy or receive the deployment token.
 
 For an optional manual update of the alternate Cloudflare frontend:
 
@@ -77,3 +81,9 @@ pnpm exec wrangler deploy
 ```
 
 Deployment of the frontend does not redeploy or reset the backend's durable request history.
+
+## Manually deploy the recommendation backend from GitHub
+
+In GitHub Actions, select **Deploy recommendation backend** → **Run workflow** → branch **main**. This workflow never runs on a push or pull request. It tests the backend, validates its bundle, deploys the existing Worker and checks readiness.
+
+It uses the same `CLOUDFLARE_API_TOKEN` repository secret; that token must permit deployment of both CheckThisOut Workers. `backend/wrangler.ci.toml` preserves the existing BUDGET binding/migration and uses `--keep-vars` to retain production model, allowed origins/users and ENABLED settings. The existing Cloudflare OPENAI_API_KEY secret is retained. This workflow updates code; change production variables separately through Cloudflare or the ignored local production configuration. It does not create or reset profile data, quotas or cached requests.
