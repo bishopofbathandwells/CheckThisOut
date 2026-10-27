@@ -40,4 +40,4 @@ jobs:
         run: pnpm exec wrangler deploy --config backend/wrangler.ci.toml --keep-vars
       - name: Check production readiness
         run: |
-          curl --fail --silent --show-error --retry 3 --retry-delay 3 https://checkthisout-recommendations.general-zodd.workers.dev/health | node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{if(!JSON.parse(s).ready)process.exit(1);console.log('Recommendation backend ready')})"
+          curl --fail --silent --show-error --retry 3 --retry-delay 3 -H "Origin: https://bishopofbathandwells.github.io" https://checkthisout-recommendations.general-zodd.workers.dev/health | node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{if(!JSON.parse(s).ready)process.exit(1);console.log('Recommendation backend ready')})"
