@@ -1,0 +1,18 @@
+name = "checkthisout-recommendations"
+main = "worker.mjs"
+compatibility_date = "2026-10-27"
+workers_dev = true
+
+[vars]
+ENABLED = "false"
+OPENAI_MODEL = "gpt-6-luna"
+ALLOWED_ORIGINS = "http://127.0.0.1:8766,https://checkthisout.general-zodd.workers.dev,https://bishopofbathandwells.github.io"
+ALLOWED_SPOTIFY_USERS = ""
+
+[[durable_objects.bindings]]
+name = "BUDGET"
+class_name = "RecommendationBudget"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RecommendationBudget"]

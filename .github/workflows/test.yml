@@ -1,0 +1,53 @@
+name: Test and deploy PWA
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.11.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Browser regression tests
+        run: |
+          node server.cjs > /tmp/checkthisout-server.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8766/ > /dev/null && break; sleep 1; done
+          pnpm test:e2e
+      - run: pnpm build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pwa
+          path: dist
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: pwa
+          path: dist
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+      - name: Publish GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,20 @@
+.dev.vars
+.env
+.env.*
+.wrangler/
+node_modules/
+.pnpm-store/
+backend/.dev.vars
+backend/.wrangler/
+
+# Local output and personal material
+/dist/
+/*.png
+/checkthisout-backup*.json
+/*.csv
+/verify-current-backup.cjs
+/HISTORY-INVESTIGATION.md
+/spotify-song-lists.md
+/PLAN.md
+/backend/DEPLOY.md
+/backend/wrangler.toml
