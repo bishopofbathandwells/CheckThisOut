@@ -74,3 +74,5 @@ pnpm build
 - The checkout may contain ignored personal backups and diagnostic artifacts. Leave them private and intact. A fresh clone will not contain production backend configuration or those personal files.
 
 Update this guide and README when behaviour or deployment changes. Do not claim a cloud deployment, Spotify action or backup restore succeeded without checking its result.
+
+- Visible app name is selectable in Preferences: Hidden Gems (default) or What a Find. Saved per profile and in backups. Preserve the existing manifest id, database names and URLs when changing branding; the static install manifest uses Hidden Gems. Three theme proposals were presented separately; do not apply one until the user chooses.
