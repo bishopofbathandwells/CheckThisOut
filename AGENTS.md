@@ -75,4 +75,4 @@ pnpm build
 
 Update this guide and README when behaviour or deployment changes. Do not claim a cloud deployment, Spotify action or backup restore succeeded without checking its result.
 
-- Visible app name is selectable in Preferences: Hidden Gems (default) or What a Find. Saved per profile and in backups. Preserve the existing manifest id, database names and URLs when changing branding; the static install manifest uses Hidden Gems. Three theme proposals were presented separately; do not apply one until the user chooses.
+- Visible app name is selectable in Preferences: Hidden Gems (default) or What a Find. Saved per profile and in backups. Preserve the existing manifest id, database names and URLs when changing branding; the static install manifest uses Hidden Gems. All three themes are selectable in Preferences: Precision (default, graphite/lime), Paper (light/cobalt), and Studio (navy/cyan). Theme is stored per profile and included in backups; old backups default to Precision. Keep all themes compact and preserve functional/accessibility parity.

@@ -87,3 +87,5 @@ Deployment of the frontend does not redeploy or reset the backend's durable requ
 In GitHub Actions, select **Deploy recommendation backend** → **Run workflow** → branch **main**. This workflow never runs on a push or pull request. It tests the backend, validates its bundle, deploys the existing Worker and checks readiness.
 
 It uses the same `CLOUDFLARE_API_TOKEN` repository secret; that token must permit deployment of both CheckThisOut Workers. `backend/wrangler.ci.toml` preserves the existing BUDGET binding/migration and uses `--keep-vars` to retain production model, allowed origins/users and ENABLED settings. The existing Cloudflare OPENAI_API_KEY secret is retained. This workflow updates code; change production variables separately through Cloudflare or the ignored local production configuration. It does not create or reset profile data, quotas or cached requests.
+
+Preferences also includes an app name (Hidden Gems / What a Find) and theme (Precision / Paper / Studio). Both choices are saved per profile and included in backups.
