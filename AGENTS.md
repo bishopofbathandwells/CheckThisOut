@@ -30,7 +30,7 @@ pnpm build
 - Windows tests use installed Edge by default; other platforms use Playwright Chromium. PLAYWRIGHT_CHANNEL overrides this.
 - Unit and browser suites cover filtering, OAuth, explicit playlist actions, history expansion and backup restoration. Run relevant checks for the change; documentation-only edits need no full test run.
 - Additional focused scripts include partial-batch-test.cjs, batch-size-test.cjs and ten-song-test.cjs.
-- Live release verification: set PWA_URL to the target website and run node pwa-release-test.cjs. It uses an isolated browser, tests offline demo behaviour and mocks Spotify authorization; it does not make a paid recommendation request.
+- Live release verification: set PWA_URL to the target website and run node pwa-release-test.cjs. It uses an isolated browser, tests offline sign-in entry and mocks Spotify authorization; it does not make a paid recommendation request.
 - Git ownership can differ in sandbox sessions. If Git reports dubious ownership, use a per-command safe.directory for this exact checkout; do not disable ownership checks globally.
 
 ## Deployment and credentials
@@ -68,7 +68,7 @@ pnpm build
 ## Persistence and migration
 
 - IndexedDB stores profiles per browser origin and account: batches, tracks, scores, keeps, preferences, exclusion registries and usage/decision logs. Cloud profiles now sync via authenticated Cloudflare D1; see README Cloud profiles and feedback. Local data still supports offline use.
-- Spotify tokens and pending PKCE state use sessionStorage, not exported backups. Cloudflare holds API secrets, quota state and cached request results, not the full browser profile.
+- Spotify tokens and pending PKCE state use sessionStorage, not exported backups. Cloudflare holds API secrets, quota state and cached request results; D1 separately stores synced user profiles. OAuth tokens remain local and are never synced.
 - Moving between localhost, Cloudflare and Pages requires a fresh Export/Import backup. Connect the intended Spotify account on the destination before importing into that profile.
 - Backups intentionally omit credentials and remote playlist links. Preserve original recommendation IDs, removed IDs, known-track metadata and logs; validate before changing state. Imports must not trigger Spotify writes.
 - The checkout may contain ignored personal backups and diagnostic artifacts. Leave them private and intact. A fresh clone will not contain production backend configuration or those personal files.
@@ -77,7 +77,7 @@ Update this guide and README when behaviour or deployment changes. Do not claim 
 
 - Visible app name is selectable in Preferences: Hidden Gems (default), What a Find or Check This Out. Saved per profile and in backups. Preserve the existing manifest id, database names and URLs when changing branding; the static install manifest uses Hidden Gems. All three themes are selectable in Preferences: Precision (default, graphite/lime), Paper (light/cobalt), and Studio (navy/cyan). Theme is stored per profile and included in backups; old backups default to Precision. Keep all themes compact and preserve functional/accessibility parity.
 
-- Also add kept songs to Spotify Liked Songs defaults to enabled for new profiles and profiles/backups without the preference. Preserve explicitly saved false. Existing keeps are not automatically synced.
+- Also add kept songs to Spotify Liked Songs defaults to enabled for new profiles and profiles/backups without the preference. Preserve explicitly saved false. Existing keeps are not automatically written to Spotify; their local records now sync to D1.
 
 - Signed-out users see Connect Spotify as the main action; sample generation was removed. Keep the legacy catalog/profile storage for existing backup compatibility. Tests seed legacy batches with test-fixtures.cjs rather than exposing demo generation.
 
