@@ -89,3 +89,11 @@ In GitHub Actions, select **Deploy recommendation backend** → **Run workflow**
 It uses the same `CLOUDFLARE_API_TOKEN` repository secret; that token must permit deployment of both CheckThisOut Workers. `backend/wrangler.ci.toml` preserves the existing BUDGET binding/migration and uses `--keep-vars` to retain production model, allowed origins/users and ENABLED settings. The existing Cloudflare OPENAI_API_KEY secret is retained. This workflow updates code; change production variables separately through Cloudflare or the ignored local production configuration. It does not create or reset profile data, quotas or cached requests.
 
 Preferences also includes an app name (Hidden Gems / What a Find / Check This Out) and theme (Precision / Paper / Studio). Both choices are saved per profile and included in backups.
+
+Signed-out users start with Connect Spotify. No sample recommendation batches are generated. Existing legacy batches remain readable and restorable.
+
+Spotify playlist context is cached on this device per account for 24 hours, surviving reloads and app reopening. It refreshes automatically on the next recommendation request after expiry; there is no refresh button. Recent plays and Liked Songs are still checked on every request.
+
+Playlist context preloads asynchronously after successful Spotify connection (including a restored signed-in session). Recommendation generation joins any in-flight load, avoiding duplicate reads. Fresh per-account disk caches survive disconnect/reconnect. Prefetch failure is retried on demand; it does not block sign-in or make model calls.
+
+Disconnected users can browse the most recently used Spotify profile as a clearly labelled read-only preview. Rating/Keep/Remove/import and Spotify writes require reconnecting. A fresh browser still shows Connect Spotify; legacy demo profiles are not used for the preview. Per-account data and caches remain separate.

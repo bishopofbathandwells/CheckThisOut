@@ -3,7 +3,7 @@ import {loadKnownTracks,probeHistory,loadPlaylistContext} from './history.js';
 const CLIENT_ID='4f83f3ad82254f3e9e8ab374f04b146b';
 const AUTH_KEY='cto-spotify-session',PENDING_KEY='cto-spotify-pkce';
 const SCOPES='playlist-modify-private playlist-read-private playlist-read-collaborative user-library-modify user-library-read user-read-recently-played';
-let refreshPromise,playlistContextPromise;
+let refreshPromise,playlistContextPromise,playlistContextExpires=0;
 const read=key=>{try{return JSON.parse(sessionStorage.getItem(key)||'null')}catch{return null}};
 const base64=bytes=>btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
 const random=()=>base64(crypto.getRandomValues(new Uint8Array(48)));
@@ -39,7 +39,7 @@ export async function api(path,{method='GET',body}={},retried=false){
  const token=await accessToken();let response;
  try{response=await fetch('https://api.spotify.com/v1'+path,{method,headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})})}catch{throw Error('Spotify connection interrupted. Retry the action; an existing playlist will be checked first.');}
  if(response.status===401&&!retried){await accessToken(true);return api(path,{method,body},true)}
- if(!response.ok){if([403,404].includes(response.status))throw Object.assign(Error(response.status===403?'Spotify denied access to this playlist. Reconnect to grant playlist permissions.':'Spotify playlist is unavailable.'),{status:response.status});if(response.status===429)throw Error(`Spotify rate limit reached. Try again in ${response.headers.get('Retry-After')||'a few'} seconds.`);throw Error(`Spotify request failed (${response.status}). Retry the action after checking your connection.`)}
+ if(!response.ok){if([403,404].includes(response.status))throw Object.assign(Error(response.status===403?(path==='/me'?'Spotify denied account access. Ask the app owner to check your Spotify email is on the Spotify app user list and their Premium subscription is active. Then reconnect.':path.startsWith('/playlists/')?'Spotify denied access to this playlist. It may not be accessible to this account or the app may lack playlist permissions.':'Spotify denied this action. Ask the app owner to check Spotify app access for your account; reconnect if permissions changed.'):'Spotify item is unavailable.'),{status:response.status});if(response.status===429)throw Error(`Spotify rate limit reached. Try again in ${response.headers.get('Retry-After')||'a few'} seconds.`);throw Error(`Spotify request failed (${response.status}). Retry the action after checking your connection.`)}
  const text=await response.text();return text?JSON.parse(text):null;
 }
 export async function currentUser(){const user=await api('/me');if(!user.id)throw Error('Spotify did not identify this account.');return user}
@@ -85,7 +85,7 @@ export async function likeTrack(uri){await api('/me/library?'+new URLSearchParam
 export async function knownTracks(){
  return loadKnownTracks(api);
 }
-export async function playlistContext(){playlistContextPromise ||= loadPlaylistContext(api).catch(error=>{playlistContextPromise=undefined;throw error});return playlistContextPromise;}
+export async function playlistContext({force=false}={}){if(force||Date.now()>=playlistContextExpires)playlistContextPromise=undefined;if(!playlistContextPromise){playlistContextExpires=Date.now()+24*60*60*1000;playlistContextPromise=loadPlaylistContext(api).catch(error=>{playlistContextPromise=undefined;throw error});}return playlistContextPromise;}
 export async function historyProbe(){return probeHistory(api)}
 export async function requestCandidates(endpoint,preferences,requestId,batchSize=5,playlistTracks,exclusions){
  const url=new URL(endpoint);if(url.protocol!=='https:'&&!(url.protocol==='http:'&&url.hostname==='127.0.0.1'))throw Error('Recommendation service must use HTTPS.');

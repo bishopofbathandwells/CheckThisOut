@@ -1,3 +1,4 @@
+const {addLegacyBatch}=require('./test-fixtures.cjs');
 const assert=require('node:assert/strict');
 const {chromium}=require('./test-browser.cjs');
 (async()=>{
@@ -33,7 +34,10 @@ const {chromium}=require('./test-browser.cjs');
  const challenge=require('node:crypto').createHash('sha256').update(pending.verifier).digest('base64url');assert(challenge);
  await page.goto('http://127.0.0.1:8766/callback?code=test-code&state='+pending.state);
  await page.getByRole('status').filter({hasText:'Connected to test-user'}).waitFor();assert.equal(new URL(page.url()).pathname,'/');assert.equal(new URL(page.url()).search,'');assert.equal(tokenCalls,1);
- await page.locator('#generate').click();await page.getByRole('button',{name:'Save to Spotify',exact:true}).click();await page.getByRole('status').filter({hasText:'503'}).waitFor();assert.equal(playlists.length,1);
+ await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin:'http://127.0.0.1:8766'});
+ await page.locator('#settings').click();await page.locator('#account-tools summary').click();assert.equal(await page.locator('#spotify-account-id').inputValue(),'test-user');await page.locator('#copy-account-id').click();await page.locator('#account-copy-status').filter({hasText:'Account ID copied.'}).waitFor();assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),'test-user');
+ await page.evaluate(()=>{window.originalClipboardWrite=navigator.clipboard.writeText.bind(navigator.clipboard);navigator.clipboard.writeText=async()=>{throw Error('denied')}});await page.locator('#copy-account-id').click();await page.locator('#account-copy-status').filter({hasText:'Automatic copy is unavailable'}).waitFor();assert.equal(await page.locator('#spotify-account-id').evaluate(e=>e.value.slice(e.selectionStart,e.selectionEnd)),'test-user');await page.evaluate(()=>{navigator.clipboard.writeText=window.originalClipboardWrite});await page.getByRole('button',{name:'Close preferences'}).click();
+ await addLegacyBatch(page,5,'spotify:test-user');await page.getByRole('button',{name:'Save to Spotify',exact:true}).click();await page.getByRole('status').filter({hasText:'503'}).waitFor();assert.equal(playlists.length,1);
  await page.getByRole('button',{name:'Save to Spotify',exact:true}).click();await page.getByRole('status').filter({hasText:'expected five matching songs, found 1'}).waitFor();assert.equal(playlists.length,1);
  await page.getByRole('button',{name:'Save to Spotify',exact:true}).click();await page.getByRole('status').filter({hasText:'Five songs saved'}).waitFor();assert.equal(playlists.length,1);assert.equal(writes,2);assert.equal(items.get('playlist-1').length,5);
  await page.locator('#settings').click();await page.locator('#also-like').check();await page.locator('#save').click();await page.getByRole('status').filter({hasText:'preferences saved'}).waitFor();await page.locator('#settings').click();if(!await page.locator('#also-like').isChecked())throw Error('Liked Songs preference not saved');await page.getByRole('button',{name:'Close preferences'}).click();
@@ -41,6 +45,7 @@ const {chromium}=require('./test-browser.cjs');
  await page.getByRole('button',{name:'Keep Back On 74',exact:true}).click();await page.getByRole('status').filter({hasText:'Already saved'}).waitFor();assert.equal(items.get('playlist-2').length,1);
  await page.evaluate(()=>{const data=JSON.parse(sessionStorage.getItem('cto-spotify-session'));data.expires=0;sessionStorage.setItem('cto-spotify-session',JSON.stringify(data))});await page.reload();await page.getByRole('status').filter({hasText:'Connected to test-user'}).waitFor();assert.equal(tokenCalls,2);
  activeUser='other-user';await page.reload();await page.getByRole('status').filter({hasText:'Connected to other-user'}).waitFor();assert.equal(await page.locator('.track').count(),0);assert.equal(await page.locator('#keep-count').textContent(),'0');
+ await page.route('https://api.spotify.com/v1/me',route=>route.fulfill({status:403,json:{error:'forbidden'}}));const denied=await page.evaluate(async()=>{try{await (await import('./spotify.js')).currentUser()}catch(e){return e.message}});assert(denied.includes('Spotify app user list'));assert(!denied.includes('playlist'));
  await page.locator('#spotify-disconnect').click();await page.getByText('Your next discovery starts here.').waitFor();assert.equal(await page.evaluate(()=>sessionStorage.getItem('cto-spotify-session')),null);
  await page.goto('http://127.0.0.1:8766/callback?code=bad&state=wrong');await page.getByRole('status').filter({hasText:'could not be verified'}).waitFor();assert.equal(tokenCalls,2);
  console.log('PASS: PKCE callback, state rejection, refresh, account isolation, playlist retry, Keep deduplication, Liked Songs, disconnect. All Spotify requests mocked.');

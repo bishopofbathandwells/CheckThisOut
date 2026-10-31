@@ -57,7 +57,7 @@ pnpm build
 ## Recommendation context and known limitations
 
 - Accessible Spotify playlist titles/artists are sampled (up to 200 tracks) as taste context; known songs and past recommendations are sent as exclusions. User consented to this metadata being sent to OpenAI. Do not silently add new data categories.
-- Playlist context loads on the first recommendation request and is cached in memory until reload/disconnect. This is not a complete lifetime listening history. Spotify recent plays were unexpectedly incomplete for this account; user accepted that limitation.
+- Playlist context loads on the first recommendation request and is cached per account in IndexedDB for 24 hours, surviving reload and reopening; no manual refresh button. Liked Songs and recent listening are fetched on every recommendation request. Cache is excluded from backup exports. This is not a complete lifetime listening history. Spotify recent plays were unexpectedly incomplete for this account; user accepted that limitation.
 - Ratings are currently stored locally and are NOT model inputs. Feeding scores into recommendations remains a possible future improvement, not implemented behaviour.
 - Backend model is configured by OPENAI_MODEL; the last deployment used gpt-6-luna with low reasoning effort. Provider timeout 90s; client timeout 110s. Verify code/config before changing.
 - The model can ignore exclusions; deterministic client filtering remains authoritative. Match Spotify IDs/URIs, ISRC and normalized title/artist; preserve Unicode and alternate-release handling. Never promise complete novelty from model instructions alone.
@@ -78,3 +78,11 @@ Update this guide and README when behaviour or deployment changes. Do not claim 
 - Visible app name is selectable in Preferences: Hidden Gems (default), What a Find or Check This Out. Saved per profile and in backups. Preserve the existing manifest id, database names and URLs when changing branding; the static install manifest uses Hidden Gems. All three themes are selectable in Preferences: Precision (default, graphite/lime), Paper (light/cobalt), and Studio (navy/cyan). Theme is stored per profile and included in backups; old backups default to Precision. Keep all themes compact and preserve functional/accessibility parity.
 
 - Also add kept songs to Spotify Liked Songs defaults to enabled for new profiles and profiles/backups without the preference. Preserve explicitly saved false. Existing keeps are not automatically synced.
+
+- Signed-out users see Connect Spotify as the main action; sample generation was removed. Keep the legacy catalog/profile storage for existing backup compatibility. Tests seed legacy batches with test-fixtures.cjs rather than exposing demo generation.
+
+Playlist context preloads asynchronously after successful Spotify connection (including a restored signed-in session). Recommendation generation joins any in-flight load, avoiding duplicate reads. Fresh per-account disk caches survive disconnect/reconnect. Prefetch failure is retried on demand; it does not block sign-in or make model calls.
+
+- Disconnect shows the latest Spotify account’s saved batches read-only with a disconnected label. Spotify profiles and their 24-hour playlist caches remain separate. Tests use mock signed-in profiles for legacy data.
+
+Disconnected users can browse the most recently used Spotify profile as a clearly labelled read-only preview. Rating/Keep/Remove/import and Spotify writes require reconnecting. A fresh browser still shows Connect Spotify; legacy demo profiles are not used for the preview. Per-account data and caches remain separate.

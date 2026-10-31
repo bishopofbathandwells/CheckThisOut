@@ -50,3 +50,11 @@ export async function loadPlaylistContext(api){
  const playlistTracks=[],names=new Set();for(let row=0;row<200&&playlistTracks.length<200;row++)for(const pool of samples){const t=pool[row];if(!t)continue;const title=t.title.slice(0,120).trim(),artist=t.artist.slice(0,120).trim(),key=`${artist.toLowerCase()}|${title.toLowerCase()}`;if(!names.has(key)){names.add(key);playlistTracks.push({title,artist});if(playlistTracks.length===200)break}}
  return {playlistTracks,tracks:mergeKnown([],tracks),readable,unavailable};
 }
+
+export const PLAYLIST_CACHE_TTL_MS=24*60*60*1000;
+export function cachedPlaylistContext(cache,accountId,now=Date.now()){
+ const song=t=>t&&typeof t.title==='string'&&typeof t.artist==='string';
+ if(!cache||cache.version!==1||cache.accountId!==accountId||!Number.isFinite(cache.fetchedAt)||now<cache.fetchedAt||now-cache.fetchedAt>=PLAYLIST_CACHE_TTL_MS)return null;
+ const data=cache.data;if(!data||!Array.isArray(data.tracks)||!data.tracks.every(song)||!Array.isArray(data.playlistTracks)||data.playlistTracks.length>200||!data.playlistTracks.every(song))return null;
+ return data;
+}

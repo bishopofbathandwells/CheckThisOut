@@ -29,8 +29,8 @@ export function createWorker(fetcher=fetch){return {
    if(!/^Bearer [^\s]{1,4096}$/.test(authorization))throw fail('Connect Spotify first.',401);
    // This token goes ONLY to Spotify for identity verification, never to the model.
    let identity;try{identity=await fetcher('https://api.spotify.com/v1/me',{headers:{Authorization:authorization},signal:AbortSignal.timeout(8000)})}catch{throw fail('Spotify identity check is unavailable. No model request was made.',503)}
-   if(!identity.ok)throw fail('Spotify sign-in could not be verified.',identity.status===401?401:503);
-   const user=await identity.json();if(!list(env.ALLOWED_SPOTIFY_USERS).includes(user.id))throw fail('This Spotify account is not on the app allowlist.',403);
+   if(!identity.ok)throw fail(identity.status===403?'Spotify denied account access. Ask the app owner to check your Spotify email is on the Spotify app user list and their Premium subscription is active.':'Spotify sign-in could not be verified. Reconnect Spotify and try again.',identity.status===401?401:identity.status===403?403:503);
+   const user=await identity.json();if(!list(env.ALLOWED_SPOTIFY_USERS).includes(user.id))throw fail('Spotify is connected, but recommendations are not enabled for your account. Copy your Spotify account ID from Preferences and send it to the app owner to add to the recommendation allowlist.',403);
    const id=env.BUDGET.idFromName('checkthisout-global-budget-v1');
    const result=await env.BUDGET.get(id).fetch(new Request('https://budget.internal'+(checkingUsage?'/usage':checkingResult?'/result':'/recommend'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...input,userId:user.id})}));
    const response=await result.json();return reply(response,result.status);
@@ -80,7 +80,7 @@ export class RecommendationBudget {
   try{
    if(this.env.ENABLED!=='true'||!this.env.OPENAI_API_KEY)throw fail('Recommendations are disabled.',503);
    const {userId,...raw}=await request.json();
-   if(!list(this.env.ALLOWED_SPOTIFY_USERS).includes(userId))throw fail('Account not allowed.',403);
+   if(!list(this.env.ALLOWED_SPOTIFY_USERS).includes(userId))throw fail('Recommendations are not enabled for your account. Send your Spotify account ID to the app owner.',403);
    const day=new Date().toISOString().slice(0,10),dailyKey=`daily:${userId}`;
    if(new URL(request.url).pathname==='/result'){const {requestId}=validateInput({...raw,preferences:''}),entry=await this.ctx.storage.get(`request:${userId}:${requestId}`);if(!entry||entry.status!=='done')throw fail('No completed cached result exists for this account and request.',404);return json({...entry.result,cached:true});}
    if(new URL(request.url).pathname==='/usage'){const saved=await this.ctx.storage.get(dailyKey),used=saved?.day===day?saved.used:0;return json({limit:LIMITS.userDaily,remaining:Math.max(0,LIMITS.userDaily-used),resetsAt:new Date(Date.parse(day+'T00:00:00Z')+86400000).toISOString()});}

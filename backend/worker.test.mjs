@@ -131,3 +131,5 @@ test('cached candidate retrieval is account-isolated and never creates model cal
  const read=user=>s.worker.fetch(new Request('https://worker.example/result?requestId='+input.requestId,{headers:{Origin:'http://127.0.0.1:8766',Authorization:'Bearer '+user}}),s.env);
  const cached=await read('alice');assert.equal(cached.status,200);assert.equal((await cached.json()).songs.length,12);assert.equal((await read('bob')).status,404);assert.equal((await read('mallory')).status,403);assert.equal(s.calls,1);assert.equal((await s.storage.get('daily:alice')).used,1);
 });
+
+test('access errors distinguish Spotify approval from backend approval before model spending',async()=>{const s=setup();const denied=createWorker(async()=>new Response('',{status:403}));const r=await denied.fetch(s.req(),s.env);assert.equal(r.status,403);assert.match((await r.json()).error,/Spotify app user list/);const unlisted=await s.worker.fetch(s.req('friend'),s.env);assert.equal(unlisted.status,403);assert.match((await unlisted.json()).error,/Copy your Spotify account ID from Preferences/);assert.equal(s.calls,0);});
