@@ -46,15 +46,15 @@ test('same request is cached and different preferences cannot reuse its ID',asyn
  assert.equal((await s.worker.fetch(s.req('alice',input),s.env)).status,200);assert.equal(s.calls,1);
  assert.equal((await s.worker.fetch(s.req('alice',{...input,preferences:'jazz'}),s.env)).status,409);assert.equal(s.calls,1);
 });
-test('100 per account per UTC day, persisted across restarts; cached retries do not count',async()=>{
+test('50 per account per UTC day, persisted across restarts; cached retries do not count',async()=>{
  const s=setup({users:['alice','bob']}),input={requestId:crypto.randomUUID(),preferences:'soul'};
  assert.equal((await s.worker.fetch(s.req('alice',input),s.env)).status,200);
- for(let i=1;i<100;i++)assert.equal((await s.worker.fetch(s.req(),s.env)).status,200);
- assert.equal((await s.worker.fetch(s.req('alice',input),s.env)).status,200);assert.equal(s.calls,100);
+ for(let i=1;i<50;i++)assert.equal((await s.worker.fetch(s.req(),s.env)).status,200);
+ assert.equal((await s.worker.fetch(s.req('alice',input),s.env)).status,200);assert.equal(s.calls,50);
  const restarted=setup({storage:s.storage});assert.equal((await restarted.worker.fetch(restarted.req(),restarted.env)).status,429);assert.equal(restarted.calls,0);
  assert.equal((await s.worker.fetch(s.req('bob'),s.env)).status,200);
- const r=await s.worker.fetch(new Request('https://worker.example/usage',{headers:{Origin:'http://127.0.0.1:8766',Authorization:'Bearer alice'}}),s.env);const usage=await r.json();assert.equal(usage.limit,100);assert.equal(usage.remaining,0);
- await s.storage.put('daily:alice',{day:'2000-01-01',used:100});assert.equal((await s.worker.fetch(s.req(),s.env)).status,200);
+ const r=await s.worker.fetch(new Request('https://worker.example/usage',{headers:{Origin:'http://127.0.0.1:8766',Authorization:'Bearer alice'}}),s.env);const usage=await r.json();assert.equal(usage.limit,50);assert.equal(usage.remaining,0);
+ await s.storage.put('daily:alice',{day:'2000-01-01',used:50});assert.equal((await s.worker.fetch(s.req(),s.env)).status,200);
 });
 test('sizes 1 and 10 produce enough candidates; invalid sizes and reused ID changes fail',async()=>{
  const s=setup();for(const batchSize of [1,10]){const input={requestId:crypto.randomUUID(),preferences:'soul',batchSize};const r=await s.worker.fetch(s.req('alice',input),s.env);assert.equal(r.status,200);const data=await r.json();assert.equal(data.songs.length,Math.max(12,batchSize*2));const tracks=await selectDiscoveries(data.songs,[],async t=>({...t,uri:t.title}),batchSize);assert.equal(tracks.length,batchSize);assert(tracks.every(t=>t.color));assert.equal((await s.worker.fetch(s.req('alice',{...input,batchSize:5}),s.env)).status,409);}

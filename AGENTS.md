@@ -46,7 +46,7 @@ pnpm build
 
 - Small personal app for friends/family, Android first, also desktop/iOS browsers.
 - Discover NEW songs. Previously recommended and removed songs stay excluded even if batches are edited or deleted. Preserve independent exclusion registries during imports and migrations.
-- Batch size is configurable 1-10, default 5. Daily allowance is 100 requests per allowlisted account (UTC), explicitly chosen by the user.
+- Batch size is configurable 1-10, default 5. Daily allowance is 50 requests per allowlisted account (UTC), explicitly chosen by the user.
 - Generate keeps a batch local. Save to Spotify creates its playlist. Open in Spotify creates it if needed and opens it. Never automatically create playlists on generation.
 - Keep copies to a separate Spotify Keep playlist; optionally also add to Liked Songs using a preference. Imported keeps require explicit resync. Avoid duplicate writes.
 - Remove deletes from the app batch and its Spotify batch playlist if saved; preserve permanent exclusion. No separate Already know this button.

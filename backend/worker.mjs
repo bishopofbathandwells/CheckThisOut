@@ -1,6 +1,6 @@
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 const list=value=>(value||'').split(',').map(s=>s.trim()).filter(Boolean);
-export const LIMITS={userDaily:100,preferences:1200,contextTracks:200,exclusionTracks:10000,exclusionChars:600000,bodyBytes:8388608,outputTokens:3000,modelTimeoutMs:90000};
+export const LIMITS={userDaily:50,preferences:1200,contextTracks:200,exclusionTracks:10000,exclusionChars:600000,bodyBytes:8388608,outputTokens:3000,modelTimeoutMs:90000};
 const fail=(message,status=400)=>Object.assign(new Error(message),{status});
 async function boundedJson(request){
  if(!request.headers.get('Content-Type')?.startsWith('application/json'))throw fail('Send application/json.',415);
@@ -89,7 +89,7 @@ export class RecommendationBudget {
    const reserved=await this.ctx.storage.transaction(async tx=>{
     const prior=await tx.get(entryKey);if(prior){if(prior.hash!==hash)throw fail('Request ID was already used with different preferences or batch size.',409);return {prior}}
     const pending=await tx.get(pendingKey);if(pending&&Date.now()-pending.started<180000)throw fail('A recommendation request is already running for this account.',409);
-    const saved=await tx.get(dailyKey),daily=saved?.day===day?saved:{day,used:0};if(daily.used>=LIMITS.userDaily)throw fail('Your 100 daily recommendation batches are used up. Try again after midnight UTC.',429);daily.used++;await tx.put(dailyKey,daily);
+    const saved=await tx.get(dailyKey),daily=saved?.day===day?saved:{day,used:0};if(daily.used>=LIMITS.userDaily)throw fail('Your 50 daily recommendation batches are used up. Try again after midnight UTC.',429);daily.used++;await tx.put(dailyKey,daily);
     const entry={hash,status:'pending',started:Date.now()};await tx.put(entryKey,entry);await tx.put(pendingKey,{id:input.requestId,started:entry.started});return {entry};
    });
    if(reserved.prior){const p=reserved.prior;if(p.status==='done')return json({...p.result,cached:true});if(p.status==='failed')return json({error:p.error,usage:p.usage||null,errorCode:p.errorCode,elapsedMs:p.elapsedMs,cached:true},p.code);return json({error:'This request is still running or was interrupted. Start a new request after three minutes.'},409)}
