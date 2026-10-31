@@ -13,7 +13,7 @@ Alternate Cloudflare frontend: https://checkthisout.general-zodd.workers.dev/
 3. Find new songs. Save to Spotify and Open in Spotify create playlists only when pressed.
 4. Rate, Keep or Remove songs. Removed and previously recommended songs remain excluded.
 
-Recommendations use a sample of up to 200 song titles/artists from accessible Spotify playlists, up to 100 rated/kept songs as feedback, and a growing exclusion list. Metadata is sent to OpenAI through an authenticated Cloudflare Worker. The final Spotify filter remains authoritative. The app currently has a 50-request daily limit per allowlisted account.
+Recommendations use a sample of up to 200 song titles/artists from accessible Spotify playlists, up to 100 rated/kept songs as feedback, and a growing exclusion list. Metadata is sent to OpenAI through an authenticated Cloudflare Worker. The final Spotify filter remains authoritative. Repeated model candidates are filtered during selection; useful unique matches are retained without an automatic model retry. The app currently has a 50-request daily limit per allowlisted account.
 
 Install on Android using Chrome's Install app / Add to Home screen option. On iOS, open in Safari and choose Share → Add to Home Screen. Recommendations need a network connection; the cached app shell and previously saved local data remain available offline.
 

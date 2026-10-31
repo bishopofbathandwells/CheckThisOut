@@ -72,8 +72,8 @@ test('upstream errors release concurrency and are cached without exposing provid
 test('storage failure fails closed before spending',async()=>{
  const s=setup({storage:{transaction:async()=>{throw Error('storage down')}}});assert.equal((await s.worker.fetch(s.req(),s.env)).status,503);assert.equal(s.calls,0);
 });
-test('model refusals, incomplete responses, malformed and duplicate songs are rejected',async()=>{
- for(const data of [{status:'incomplete'},{status:'completed',output:[]},{status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({songs:Array(12).fill({title:'Same',artist:'Same'})})}]}]}]){
+test('model refusals, incomplete responses and malformed songs are rejected',async()=>{
+ for(const data of [{status:'incomplete'},{status:'completed',output:[]},{status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({songs:[{title:'',artist:'Artist'}]})}]}]}]){
   const s=setup({modelData:data});assert.equal((await s.worker.fetch(s.req(),s.env)).status,502);
  }
 });
@@ -135,3 +135,17 @@ test('cached candidate retrieval is account-isolated and never creates model cal
 test('access errors distinguish Spotify approval from backend approval before model spending',async()=>{const s=setup();const denied=createWorker(async()=>new Response('',{status:403}));const r=await denied.fetch(s.req(),s.env);assert.equal(r.status,403);assert.match((await r.json()).error,/Spotify app user list/);const unlisted=await s.worker.fetch(s.req('friend'),s.env);assert.equal(unlisted.status,403);assert.match((await unlisted.json()).error,/Copy your Spotify account ID from Preferences/);assert.equal(s.calls,0);});
 
 test('ratings and keeps reach the model and are part of request identity',async()=>{const s=setup(),input={requestId:crypto.randomUUID(),preferences:'soul',feedback:[{title:'Loved',artist:'Artist',rating:5},{title:'Kept',artist:'Other',kept:true}]};assert.equal((await s.worker.fetch(s.req('alice',input),s.env)).status,200);assert.deepEqual(JSON.parse(s.body.input).listener_feedback,input.feedback);assert.match(s.body.instructions,/Removed and excluded songs are not negative taste evidence/);assert.equal((await s.worker.fetch(s.req('alice',{...input,feedback:[{title:'Loved',artist:'Artist',rating:1}]}),s.env)).status,409);for(const feedback of [[{title:'x',artist:'y',rating:0}],[{title:'x',artist:'y',removed:true}],[{title:'x',artist:'y'}]])assert.equal((await s.worker.fetch(s.req('alice',{requestId:crypto.randomUUID(),preferences:'',feedback}),s.env)).status,400);});
+
+ test('duplicate model candidates retain unique matches without retries or repeated Spotify lookups',async()=>{
+  for(const uniqueCount of [1,11]){
+   const songs=Array.from({length:12},(_,i)=>({title:'Song '+(i%uniqueCount),artist:'Artist'}));
+   const s=setup({modelData:{status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({songs})}]}]}});
+   const input={requestId:crypto.randomUUID(),preferences:'soul'};
+   const response=await s.worker.fetch(s.req('alice',input),s.env);assert.equal(response.status,200);
+   const data=await response.json();let lookups=0;const audit=[];
+   const selected=await selectDiscoveries(data.songs,[],async t=>{lookups++;return {...t,uri:t.title}},5,audit);
+   assert.equal(selected.length,Math.min(5,uniqueCount));assert.equal(lookups,selected.length);
+   assert.equal(new Set(selected.map(t=>t.uri)).size,selected.length);
+   assert.equal((await s.worker.fetch(s.req('alice',input),s.env)).status,200);assert.equal(s.calls,1);
+  }
+ });

@@ -64,7 +64,8 @@ export async function generateCandidates(preferences,env,fetcher=fetch,batchSize
  let data;try{data=JSON.parse(text)}catch{throw fail('The model did not return a usable song list.',502)}
  if(!Array.isArray(data.songs)||data.songs.length!==count||data.songs.some(s=>!s||typeof s.title!=='string'||typeof s.artist!=='string'||!s.title.trim()||!s.artist.trim()||s.title.length>180||s.artist.length>180))throw fail('The model returned an invalid song list.',502);
  const songs=data.songs.map(s=>({title:s.title.trim(),artist:s.artist.trim()}));
- if(new Set(songs.map(s=>`${s.artist.toLowerCase()}\0${s.title.toLowerCase()}`)).size!==count)throw fail('The model returned duplicate candidates. No songs were saved.',502);
+ // Keep valid candidates: client selection filters repeats before Spotify lookup.
+ // A repeated candidate must not discard the other songs or trigger another model call.
  return {songs,source:'model',context:'playlist-context',usage,elapsedMs:Date.now()-started};
  }catch(error){error.usage=usage;error.elapsedMs=Date.now()-started;throw error}
 }
