@@ -88,4 +88,4 @@ In GitHub Actions, select **Deploy recommendation backend** → **Run workflow**
 
 It uses the same `CLOUDFLARE_API_TOKEN` repository secret; that token must permit deployment of both CheckThisOut Workers. `backend/wrangler.ci.toml` preserves the existing BUDGET binding/migration and uses `--keep-vars` to retain production model, allowed origins/users and ENABLED settings. The existing Cloudflare OPENAI_API_KEY secret is retained. This workflow updates code; change production variables separately through Cloudflare or the ignored local production configuration. It does not create or reset profile data, quotas or cached requests.
 
-Preferences also includes an app name (Hidden Gems / What a Find) and theme (Precision / Paper / Studio). Both choices are saved per profile and included in backups.
+Preferences also includes an app name (Hidden Gems / What a Find / Check This Out) and theme (Precision / Paper / Studio). Both choices are saved per profile and included in backups.
