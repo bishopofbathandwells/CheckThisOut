@@ -4,3 +4,5 @@ export const recommendationEndpoint='https://checkthisout-recommendations.genera
 
 // Playlist metadata context approved by the user on 27 October 2026.
 export const playlistContextEnabled=true;
+
+export const cloudSyncEnabled=true;

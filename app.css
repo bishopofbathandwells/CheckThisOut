@@ -30,3 +30,5 @@ body{background:var(--bg);color:var(--ink)}header,main{max-width:1000px}header{b
 [hidden]{display:none!important}
 
 body[aria-busy="true"] button:disabled{cursor:progress}
+
+#cloud-storage summary{padding:8px 0;font-size:13px}#cloud-storage p{margin:6px 0;line-height:1.4}

@@ -5,7 +5,7 @@ const {chromium}=require('./test-browser.cjs');
  const browser=await chromium.launch({headless:true,channel:'msedge'});
  try{
  const page=await browser.newPage({serviceWorkers:'block'}),playlistItems=new Map();let nextId=0,requestCount=0,failDelete=true,deleteCalls=0,playlistReads=0,releasePlaylist;const playlistGate=new Promise(resolve=>{releasePlaylist=resolve});
- page.on('request',r=>{if(r.url()===endpoint){const body=r.postDataJSON();assert.deepEqual(Object.keys(body).sort(),['batchSize','exclusions','playlistTracks','preferences','requestId']);assert.deepEqual(body.playlistTracks,[{title:'Seed Song',artist:'Seed Artist'}]);if(requestCount===1)assert(body.exclusions.some(t=>t.title==='Local Song 1'));requestCount++}});
+ page.on('request',r=>{if(r.url()===endpoint){const body=r.postDataJSON();assert.deepEqual(Object.keys(body).sort(),['batchSize','exclusions','feedback','playlistTracks','preferences','requestId']);assert.deepEqual(body.playlistTracks,[{title:'Seed Song',artist:'Seed Artist'}]);if(requestCount===1){assert(body.exclusions.some(t=>t.title==='Local Song 1'));assert(body.feedback.some(t=>t.title==='Local Song 2'&&t.rating===4));}requestCount++}});
  await page.route('**/config.js',route=>route.fulfill({contentType:'text/javascript',body:`export const recommendationEndpoint=${JSON.stringify(endpoint)};export const playlistContextEnabled=true;`}));
  await page.addInitScript(()=>sessionStorage.setItem('cto-spotify-session',JSON.stringify({access_token:'local-test-token',refresh_token:'mock-refresh',expires:Date.now()+3600000})));
  await page.route('https://api.spotify.com/v1/**',async route=>{

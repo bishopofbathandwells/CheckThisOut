@@ -13,3 +13,9 @@ class_name = "RecommendationBudget"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["RecommendationBudget"]
+
+[[d1_databases]]
+binding = "PROFILES"
+database_name = "checkthisout-profiles"
+database_id = "5dde1a5e-d43e-475d-8691-8aeeb7a5dcfb"
+migrations_dir = "migrations"

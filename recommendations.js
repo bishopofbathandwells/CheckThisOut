@@ -15,3 +15,9 @@ export function modelExclusions(tracks){
  const entries=new Map();for(const t of tracks){if(!t?.title||!t.artist)continue;for(const a of t.artists?.length?t.artists:[t.artist]){const title=t.title.slice(0,180).trim(),artist=a.slice(0,180).trim();if(title&&artist)entries.set(`${artist.normalize('NFKD').toLowerCase()}|${title.normalize('NFKD').toLowerCase()}`,{title,artist})}}
  const list=[...entries.values()];if(list.length>10000||JSON.stringify(list).length>600000)throw Error('Your exclusion list has exceeded the supported model context size. No model request was made.');return list;
 }
+
+export function modelFeedback(profile,lookup,limit=100){
+ const ids=[...new Set([...(profile.batches||[]).slice().reverse().flatMap(b=>(b.originalIds||b.ids).slice().reverse()),...Object.keys(profile.ratings||{}),...(profile.keeps||[])])],kept=new Set(profile.keeps||[]),out=[];
+ for(const id of ids){const t=lookup(id),rating=profile.ratings?.[id];if(!t?.title||!t.artist||!kept.has(id)&&!(Number.isInteger(rating)&&rating>=1&&rating<=5))continue;out.push({title:t.title.slice(0,180),artist:t.artist.slice(0,180),...(rating?{rating}:{}),...(kept.has(id)?{kept:true}:{})});if(out.length>=limit)break;}
+ return out;
+}

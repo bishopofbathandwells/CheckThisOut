@@ -1,3 +1,4 @@
+import {spotifyThrottle,spotifyThrottleMessage} from './spotify-rate-limit.js';
 // Public application identifier. PKCE deliberately requires no client secret.
 import {loadKnownTracks,probeHistory,loadPlaylistContext} from './history.js';
 const CLIENT_ID='4f83f3ad82254f3e9e8ab374f04b146b';
@@ -35,11 +36,14 @@ async function accessToken(force=false){let session=read(AUTH_KEY);if(!session)t
  if(force||session.expires<Date.now()+60000){if(!session.refresh_token){disconnect();throw Error('Spotify session expired. Please connect again.');}
  refreshPromise ||= tokenRequest({grant_type:'refresh_token',refresh_token:session.refresh_token},session).finally(()=>{refreshPromise=undefined});session=await refreshPromise;}return session.access_token;
 }
+function storedThrottle(){try{return JSON.parse(localStorage.getItem('cto-spotify-throttle')||'null')}catch{return null}}
 export async function api(path,{method='GET',body}={},retried=false){
+ const previousLimit=storedThrottle();if(previousLimit?.retryAt>Date.now())throw Object.assign(Error(spotifyThrottleMessage(previousLimit)),{status:429,retryAt:previousLimit.retryAt});
  const token=await accessToken();let response;
  try{response=await fetch('https://api.spotify.com/v1'+path,{method,headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})})}catch{throw Error('Spotify connection interrupted. Retry the action; an existing playlist will be checked first.');}
  if(response.status===401&&!retried){await accessToken(true);return api(path,{method,body},true)}
- if(!response.ok){if([403,404].includes(response.status))throw Object.assign(Error(response.status===403?(path==='/me'?'Spotify denied account access. Ask the app owner to check your Spotify email is on the Spotify app user list and their Premium subscription is active. Then reconnect.':path.startsWith('/playlists/')?'Spotify denied access to this playlist. It may not be accessible to this account or the app may lack playlist permissions.':'Spotify denied this action. Ask the app owner to check Spotify app access for your account; reconnect if permissions changed.'):'Spotify item is unavailable.'),{status:response.status});if(response.status===429)throw Error(`Spotify rate limit reached. Try again in ${response.headers.get('Retry-After')||'a few'} seconds.`);throw Error(`Spotify request failed (${response.status}). Retry the action after checking your connection.`)}
+ if(response.status===429){const limit=await spotifyThrottle(response,Date.now(),previousLimit&&Date.now()-previousLimit.retryAt<900000?(previousLimit.attempt||0)+1:1);try{localStorage.setItem('cto-spotify-throttle',JSON.stringify(limit))}catch{};throw Object.assign(Error(spotifyThrottleMessage(limit)),{status:429,retryAt:limit.retryAt});}
+ if(!response.ok){if([403,404].includes(response.status))throw Object.assign(Error(response.status===403?(path==='/me'?'Spotify denied account access. Ask the app owner to check your Spotify email is on the Spotify app user list and their Premium subscription is active. Then reconnect.':path.startsWith('/playlists/')?'Spotify denied access to this playlist. It may not be accessible to this account or the app may lack playlist permissions.':'Spotify denied this action. Ask the app owner to check Spotify app access for your account; reconnect if permissions changed.'):'Spotify item is unavailable.'),{status:response.status});throw Error(`Spotify request failed (${response.status}). Retry the action after checking your connection.`)}
  const text=await response.text();return text?JSON.parse(text):null;
 }
 export async function currentUser(){const user=await api('/me');if(!user.id)throw Error('Spotify did not identify this account.');return user}
@@ -87,9 +91,9 @@ export async function knownTracks(){
 }
 export async function playlistContext({force=false}={}){if(force||Date.now()>=playlistContextExpires)playlistContextPromise=undefined;if(!playlistContextPromise){playlistContextExpires=Date.now()+24*60*60*1000;playlistContextPromise=loadPlaylistContext(api).catch(error=>{playlistContextPromise=undefined;throw error});}return playlistContextPromise;}
 export async function historyProbe(){return probeHistory(api)}
-export async function requestCandidates(endpoint,preferences,requestId,batchSize=5,playlistTracks,exclusions){
+export async function requestCandidates(endpoint,preferences,requestId,batchSize=5,playlistTracks,exclusions,feedback){
  const url=new URL(endpoint);if(url.protocol!=='https:'&&!(url.protocol==='http:'&&url.hostname==='127.0.0.1'))throw Error('Recommendation service must use HTTPS.');
- const send=async force=>fetch(url,{method:'POST',signal:AbortSignal.timeout(110000),headers:{Authorization:`Bearer ${await accessToken(force)}`,'Content-Type':'application/json'},body:JSON.stringify({requestId,preferences,batchSize,...(playlistTracks?{playlistTracks}:{}),...(exclusions?{exclusions}:{})})});
+ const send=async force=>fetch(url,{method:'POST',signal:AbortSignal.timeout(110000),headers:{Authorization:`Bearer ${await accessToken(force)}`,'Content-Type':'application/json'},body:JSON.stringify({requestId,preferences,batchSize,...(playlistTracks?{playlistTracks}:{}),...(exclusions?{exclusions}:{}),...(feedback?{feedback}:{})})});
  let response=await send(false);if(response.status===401)response=await send(true);
  const data=await response.json();if(!response.ok){const error=Error(data.error||'Recommendation request failed.');error.usage=data.usage||null;error.errorCode=data.errorCode;error.elapsedMs=data.elapsedMs;error.cached=!!data.cached;error.terminal=response.status===502||response.status===504||response.status===400;throw error;}
  if(!Array.isArray(data.songs)||data.songs.length!==Math.max(12,batchSize*2)||data.songs.some(t=>!t||typeof t.title!=='string'||typeof t.artist!=='string'||t.title.length>180||t.artist.length>180))throw Error('Recommendation service returned an invalid song list.');
@@ -100,3 +104,8 @@ export async function recommendationUsage(endpoint){const url=new URL(endpoint);
 export async function cachedCandidates(endpoint,requestId){const url=new URL(endpoint);url.pathname=url.pathname.replace(/\/recommend$/,'/result');url.search=new URLSearchParams({requestId});const send=async force=>fetch(url,{headers:{Authorization:`Bearer ${await accessToken(force)}`},signal:AbortSignal.timeout(15000)});let response=await send(false);if(response.status===401)response=await send(true);const data=await response.json();if(!response.ok)throw Error(data.error||'Cached result unavailable.');return data;}
 
 export async function playlistName(id){const p=await api(`/playlists/${encodeURIComponent(id)}?fields=name`);if(typeof p?.name!=='string'||!p.name.trim())throw Error('Spotify did not return the playlist name.');return p.name;}
+
+export async function profileRequest(endpoint,method='GET',body){const limit=storedThrottle();if(limit?.retryAt>Date.now())throw Error(spotifyThrottleMessage(limit));
+ const url=new URL(endpoint);if(url.protocol!=='https:'&&!(url.protocol==='http:'&&url.hostname==='127.0.0.1'))throw Error('Cloud sync requires HTTPS.');url.pathname=url.pathname.replace(/\/recommend$/,'/profile');url.search='';
+ const send=async force=>fetch(url,{method,signal:AbortSignal.timeout(20000),headers:{Authorization:'Bearer '+await accessToken(force),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});let r=await send(false);if(r.status===401)r=await send(true);const data=await r.json();if(!r.ok&&r.status!==409)throw Error(data.error||'Cloud sync unavailable. Your local changes are safe.');return data;
+}

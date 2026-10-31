@@ -13,13 +13,13 @@ Alternate Cloudflare frontend: https://checkthisout.general-zodd.workers.dev/
 3. Find new songs. Save to Spotify and Open in Spotify create playlists only when pressed.
 4. Rate, Keep or Remove songs. Removed and previously recommended songs remain excluded.
 
-Recommendations use a sample of up to 200 song titles/artists from accessible Spotify playlists and a growing exclusion list. Metadata is sent to OpenAI through an authenticated Cloudflare Worker. The final Spotify filter remains authoritative. The app currently has a 50-request daily limit per allowlisted account.
+Recommendations use a sample of up to 200 song titles/artists from accessible Spotify playlists, up to 100 rated/kept songs as feedback, and a growing exclusion list. Metadata is sent to OpenAI through an authenticated Cloudflare Worker. The final Spotify filter remains authoritative. The app currently has a 50-request daily limit per allowlisted account.
 
 Install on Android using Chrome's Install app / Add to Home screen option. On iOS, open in Safari and choose Share → Add to Home Screen. Recommendations need a network connection; the cached app shell and previously saved local data remain available offline.
 
 ## Data and backups
 
-Batches, ratings, keeps, preferences, exclusions and request/decision logs are stored in IndexedDB **per browser origin and Spotify account**. They are not automatically synced between devices. Moving from localhost to the live URL requires exporting and importing a backup, then reconnecting Spotify.
+Batches, ratings, keeps, preferences, exclusions and request/decision logs are stored in IndexedDB **per browser origin and Spotify account**. Signed-in allowlisted profiles sync through the backend to Cloudflare D1. A fresh browser restores the cloud profile after Spotify sign-in. Unsynced offline changes remain on the device until it reconnects. Browser origins retain independent local copies.
 
 Export backup opens a Save file / Copy export dialog. Import restores local state but excludes login credentials and remote playlist links. Restored keeps can be explicitly saved to Spotify. Request usage and candidate rejection details are available in Preferences. Cost figures are estimates derived from provider token usage, not billing invoices.
 
@@ -97,3 +97,17 @@ Spotify playlist context is cached on this device per account for 24 hours, surv
 Playlist context preloads asynchronously after successful Spotify connection (including a restored signed-in session). Recommendation generation joins any in-flight load, avoiding duplicate reads. Fresh per-account disk caches survive disconnect/reconnect. Prefetch failure is retried on demand; it does not block sign-in or make model calls.
 
 Disconnected users can browse the most recently used Spotify profile as a clearly labelled read-only preview. Rating/Keep/Remove/import and Spotify writes require reconnecting. A fresh browser still shows Connect Spotify; legacy demo profiles are not used for the preview. Per-account data and caches remain separate.
+
+## Cloud profiles and feedback
+
+D1 database: checkthisout-profiles; Worker binding: PROFILES. Profile writes use revision checks, not blind overwrites. Five recent revisions are retained in chunks to stay below D1 row limits. Profiles are capped at 8 MB; oversize or failed sync leaves local data unchanged. Cloud sync has no model cost or recommendation-quota use.
+
+Synced: batches and their same-account Spotify playlist links, ratings, keeps, preferences, exclusion history and request/decision logs. Not synced: Spotify/OAuth tokens, OpenAI secrets, playlist cache, transient in-flight requests or local account metadata. Backup exports remain independent and intentionally omit remote playlist links.
+
+Sync runs after sign-in, on profile changes, on returning to the app and on network reconnection. Preferences → Cloud storage shows status and Sync now. Concurrent unsynced edits require choosing a version; neither is silently overwritten. Choosing cloud preserves a device recovery copy available for export. Use backups before resolving a conflict if you want an additional independent copy.
+
+Schema migrations are separate from normal deployment. From the checkout: node node_modules/wrangler/bin/wrangler.js d1 migrations apply PROFILES --config backend/wrangler.ci.toml --remote. This requires D1 access; the GitHub deploy token can continue deploying the existing binding with Workers deployment permissions. Do not recreate the database or reset the existing BUDGET Durable Object.
+
+Ratings 4-5 are positive evidence, 1-2 negative and 3 neutral. Keeps are positive evidence; explicit scores take precedence if they conflict. Remove remains exclusion only. At most 100 feedback songs are sent (recent batches first), with titles/artists and score/Keep flags only. Feedback affects the next new model request, not an already generated batch.
+
+Spotify 429 responses respect Retry-After. Without a reset time, the client backs off conservatively, distinguishes API-quota exhaustion and preserves the sign-in session. Waiting locally does not guarantee Spotify's quota has reset.

@@ -31,3 +31,5 @@ test('decision audit identifies previous/known/duplicate/unmatched songs, exact 
 test('non-Latin song titles remain distinct in exclusion matching',async()=>{
  const known=[{title:'アイドル',artist:'YOASOBI'}],audit=[];const tracks=await selectDiscoveries([{title:'夜に駆ける',artist:'YOASOBI'}],known,async t=>({...t,uri:'fresh'}),1,audit);assert.equal(tracks.length,1);assert.equal(audit[0].outcome,'accepted');
 });
+
+test('model feedback contains ratings and keeps but no unscored removal signal or IDs',async()=>{const {modelFeedback}=await import('./recommendations.js');const p={batches:[{ids:['a','b','c','d']}],ratings:{a:5,b:1},keeps:['c'],nukedIds:['d']};const feedback=modelFeedback(p,id=>({title:id,artist:'Artist',uri:'secret-id'}));assert.equal(feedback.length,3);assert(feedback.some(t=>t.title==='a'&&t.rating===5));assert(feedback.some(t=>t.title==='b'&&t.rating===1));assert(feedback.some(t=>t.title==='c'&&t.kept));assert(!feedback.some(t=>t.title==='d'));assert(!JSON.stringify(feedback).includes('secret-id'));assert.equal(modelFeedback(p,id=>({title:id,artist:'Artist'}),1).length,1);});

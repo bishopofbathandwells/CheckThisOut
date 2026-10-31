@@ -33,7 +33,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Test backend
-        run: node --test backend/worker.test.mjs
+        run: node --test backend/*.test.mjs
       - name: Validate backend bundle
         run: pnpm exec wrangler deploy --config backend/wrangler.ci.toml --dry-run
       - name: Deploy backend preserving production variables

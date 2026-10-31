@@ -58,7 +58,7 @@ pnpm build
 
 - Accessible Spotify playlist titles/artists are sampled (up to 200 tracks) as taste context; known songs and past recommendations are sent as exclusions. User consented to this metadata being sent to OpenAI. Do not silently add new data categories.
 - Playlist context loads on the first recommendation request and is cached per account in IndexedDB for 24 hours, surviving reload and reopening; no manual refresh button. Liked Songs and recent listening are fetched on every recommendation request. Cache is excluded from backup exports. This is not a complete lifetime listening history. Spotify recent plays were unexpectedly incomplete for this account; user accepted that limitation.
-- Ratings are currently stored locally and are NOT model inputs. Feeding scores into recommendations remains a possible future improvement, not implemented behaviour.
+- Ratings and Keeps now guide model recommendations: up to 100 title/artist pairs with scores/Keep flags. 4-5 positive, 1-2 negative, 3 neutral. Remove is exclusion only.
 - Backend model is configured by OPENAI_MODEL; the last deployment used gpt-6-luna with low reasoning effort. Provider timeout 90s; client timeout 110s. Verify code/config before changing.
 - The model can ignore exclusions; deterministic client filtering remains authoritative. Match Spotify IDs/URIs, ISRC and normalized title/artist; preserve Unicode and alternate-release handling. Never promise complete novelty from model instructions alone.
 - Exclusions have explicit size guards (10,000 entries / 600,000 serialized characters); do not silently truncate them.
@@ -67,7 +67,7 @@ pnpm build
 
 ## Persistence and migration
 
-- IndexedDB stores profiles per browser origin and account: batches, tracks, scores, keeps, preferences, exclusion registries and usage/decision logs. No Google account sync or cloud profile backup is implemented.
+- IndexedDB stores profiles per browser origin and account: batches, tracks, scores, keeps, preferences, exclusion registries and usage/decision logs. Cloud profiles now sync via authenticated Cloudflare D1; see README Cloud profiles and feedback. Local data still supports offline use.
 - Spotify tokens and pending PKCE state use sessionStorage, not exported backups. Cloudflare holds API secrets, quota state and cached request results, not the full browser profile.
 - Moving between localhost, Cloudflare and Pages requires a fresh Export/Import backup. Connect the intended Spotify account on the destination before importing into that profile.
 - Backups intentionally omit credentials and remote playlist links. Preserve original recommendation IDs, removed IDs, known-track metadata and logs; validate before changing state. Imports must not trigger Spotify writes.
@@ -86,3 +86,5 @@ Playlist context preloads asynchronously after successful Spotify connection (in
 - Disconnect shows the latest Spotify account’s saved batches read-only with a disconnected label. Spotify profiles and their 24-hour playlist caches remain separate. Tests use mock signed-in profiles for legacy data.
 
 Disconnected users can browse the most recently used Spotify profile as a clearly labelled read-only preview. Rating/Keep/Remove/import and Spotify writes require reconnecting. A fresh browser still shows Connect Spotify; legacy demo profiles are not used for the preview. Per-account data and caches remain separate.
+
+D1: binding PROFILES / database checkthisout-profiles. Migrations in backend/migrations are applied separately before deployment. Cloud sync is revision-checked, offline-first and account-isolated; Preferences exposes conflicts and a device recovery export. Tokens, playlist cache and transient requests are excluded. The legacy Spotify user.id remains the allowlist/profile key; do not silently migrate identity fields. Sync does not spend model quota. Tests include cloud-sync.test.mjs, backend/profile-store.test.mjs and cloud-profile-test.cjs.
