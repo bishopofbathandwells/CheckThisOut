@@ -76,3 +76,5 @@ pnpm build
 Update this guide and README when behaviour or deployment changes. Do not claim a cloud deployment, Spotify action or backup restore succeeded without checking its result.
 
 - Visible app name is selectable in Preferences: Hidden Gems (default), What a Find or Check This Out. Saved per profile and in backups. Preserve the existing manifest id, database names and URLs when changing branding; the static install manifest uses Hidden Gems. All three themes are selectable in Preferences: Precision (default, graphite/lime), Paper (light/cobalt), and Studio (navy/cyan). Theme is stored per profile and included in backups; old backups default to Precision. Keep all themes compact and preserve functional/accessibility parity.
+
+- Also add kept songs to Spotify Liked Songs defaults to enabled for new profiles and profiles/backups without the preference. Preserve explicitly saved false. Existing keeps are not automatically synced.
