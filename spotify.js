@@ -105,7 +105,9 @@ export async function cachedCandidates(endpoint,requestId){const url=new URL(end
 
 export async function playlistName(id){const p=await api(`/playlists/${encodeURIComponent(id)}?fields=name`);if(typeof p?.name!=='string'||!p.name.trim())throw Error('Spotify did not return the playlist name.');return p.name;}
 
-export async function profileRequest(endpoint,method='GET',body){const limit=storedThrottle();if(limit?.retryAt>Date.now())throw Error(spotifyThrottleMessage(limit));
- const url=new URL(endpoint);if(url.protocol!=='https:'&&!(url.protocol==='http:'&&url.hostname==='127.0.0.1'))throw Error('Cloud sync requires HTTPS.');url.pathname=url.pathname.replace(/\/recommend$/,'/profile');url.search='';
+export async function profileRequest(endpoint,method='GET',body,path='/profile'){const limit=storedThrottle();if(limit?.retryAt>Date.now())throw Error(spotifyThrottleMessage(limit));
+ const url=new URL(endpoint);if(url.protocol!=='https:'&&!(url.protocol==='http:'&&url.hostname==='127.0.0.1'))throw Error('Cloud sync requires HTTPS.');url.pathname=url.pathname.replace(/\/recommend$/,path);url.search='';
  const send=async force=>fetch(url,{method,signal:AbortSignal.timeout(20000),headers:{Authorization:'Bearer '+await accessToken(force),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});let r=await send(false);if(r.status===401)r=await send(true);const data=await r.json();if(!r.ok&&r.status!==409)throw Error(data.error||'Cloud sync unavailable. Your local changes are safe.');return data;
 }
+
+export const developerUsage=endpoint=>profileRequest(endpoint,'GET',undefined,'/developer/usage');

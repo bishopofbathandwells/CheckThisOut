@@ -113,3 +113,7 @@ Schema migrations are separate from normal deployment. From the checkout: node n
 Ratings 4-5 are positive evidence, 1-2 negative and 3 neutral. Keeps are positive evidence; explicit scores take precedence if they conflict. Remove remains exclusion only. At most 100 feedback songs are sent (recent batches first), with titles/artists and score/Keep flags only. Feedback affects the next new model request, not an already generated batch.
 
 Spotify 429 responses respect Retry-After. Without a reset time, the client backs off conservatively, distinguishes API-quota exhaustion and preserves the sign-in session. Waiting locally does not guarantee Spotify's quota has reset.
+
+## Developer usage
+
+The developer account sees Preferences ? Developer ? Usage: saved batch counts, latest batch and last cloud sync for each backend-allowlisted account, including accounts with no synced profile. This is synced activity, not visit tracking. No song lists or preferences are returned. GET /developer/usage verifies Spotify identity and requires it to match the explicit DEVELOPER_SPOTIFY_USER backend variable; unset means access is denied. The public developerSpotifyUserId setting controls UI visibility only. Loading the view is manual and makes no model request.

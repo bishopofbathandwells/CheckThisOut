@@ -34,3 +34,5 @@ body[aria-busy="true"] button:disabled{cursor:progress}
 #cloud-storage summary{padding:8px 0;font-size:13px}#cloud-storage p{margin:6px 0;line-height:1.4}
 
 #report-issue{display:block;text-align:center;font-size:13px;padding:8px;border:1px solid var(--line);border-radius:6px;text-decoration:none}#report-issue:hover{color:var(--ink);background:var(--field)}
+
+#developer-tools summary{padding:8px 0;font-size:13px}#developer-usage-results{overflow-x:auto}#developer-usage-results table{width:100%;border-collapse:collapse;font-size:11px}#developer-usage-results th,#developer-usage-results td{text-align:left;padding:7px 5px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}#developer-usage-status{line-height:1.4}

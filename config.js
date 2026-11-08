@@ -6,3 +6,6 @@ export const recommendationEndpoint='https://checkthisout-recommendations.genera
 export const playlistContextEnabled=true;
 
 export const cloudSyncEnabled=true;
+
+// UI visibility only; the backend independently verifies developer identity.
+export const developerSpotifyUserId='31hl4wz7lmymikmroghaxqpeel7y';

@@ -22,3 +22,12 @@ export async function writeCloudProfile(db,userId,revision,profile){
  const results=await db.batch(statements);if(!results[0].meta.changes)return {conflict:true,...await readCloudProfile(db,userId)};
  return {revision:next,updatedAt};
 }
+
+// Owner-only aggregate view; callers must authorize before invoking this function.
+export async function profileUsage(db,userIds){
+ return Promise.all([...new Set(userIds)].map(async userId=>{
+  const saved=await readCloudProfile(db,userId),batches=saved.profile?.batches||[];
+  const dates=batches.map(b=>b.created).filter(d=>Number.isFinite(Date.parse(d))).sort((a,b)=>Date.parse(b)-Date.parse(a));
+  return {userId,batchCount:saved.profile?batches.length:null,latestBatch:dates[0]||null,lastSyncedAt:saved.updatedAt};
+ }));
+}

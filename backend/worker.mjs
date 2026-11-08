@@ -1,4 +1,4 @@
-import {readCloudProfile,writeCloudProfile} from './profile-store.mjs';
+import {readCloudProfile,writeCloudProfile,profileUsage} from './profile-store.mjs';
 import {spotifyThrottle,spotifyThrottleMessage} from '../spotify-rate-limit.js';
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 const list=value=>(value||'').split(',').map(s=>s.trim()).filter(Boolean);
@@ -22,12 +22,13 @@ export function createWorker(fetcher=fetch){return {
   if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
   const path=new URL(request.url).pathname;
   if(path==='/health'&&request.method==='GET')return reply({ready:!!configured(env),mode:'playlist-context',cloudSync:!!env.PROFILES,limits:LIMITS},200);
+  const developerUsage=path==='/developer/usage'&&request.method==='GET';
   const profileRequest=path==='/profile'&&['GET','PUT'].includes(request.method);
   const checkingUsage=path==='/usage'&&request.method==='GET',checkingResult=path==='/result'&&request.method==='GET';
-  if(!profileRequest&&!checkingUsage&&!checkingResult&&(path!=='/recommend'||request.method!=='POST'))return reply({error:'Not found.'},404);
-  if(!profileRequest&&!configured(env))return reply({error:'Recommendations are not enabled yet.'},503);
+  if(!developerUsage&&!profileRequest&&!checkingUsage&&!checkingResult&&(path!=='/recommend'||request.method!=='POST'))return reply({error:'Not found.'},404);
+  if(!developerUsage&&!profileRequest&&!configured(env))return reply({error:'Recommendations are not enabled yet.'},503);
   try{
-   const input=profileRequest?{}:checkingUsage?{}:checkingResult?{requestId:validateInput({requestId:new URL(request.url).searchParams.get('requestId'),preferences:''}).requestId}:validateInput(await boundedJson(request));
+   const input=developerUsage||profileRequest?{}:checkingUsage?{}:checkingResult?{requestId:validateInput({requestId:new URL(request.url).searchParams.get('requestId'),preferences:''}).requestId}:validateInput(await boundedJson(request));
    const authorization=request.headers.get('Authorization')||'';
    if(!/^Bearer [^\s]{1,4096}$/.test(authorization))throw fail('Connect Spotify first.',401);
    // This token goes ONLY to Spotify for identity verification, never to the model.
@@ -35,11 +36,12 @@ export function createWorker(fetcher=fetch){return {
    if(identity.status===429){const limit=await spotifyThrottle(identity);const response=reply({error:spotifyThrottleMessage(limit),retryAt:limit.retryAt},429);response.headers.set('Retry-After',String(Math.ceil((limit.retryAt-Date.now())/1000)));return response;}
    if(!identity.ok)throw fail(identity.status===403?'Spotify denied account access. Ask the app owner to check your Spotify email is on the Spotify app user list and their Premium subscription is active.':'Spotify sign-in could not be verified. Reconnect Spotify and try again.',identity.status===401?401:identity.status===403?403:503);
    const user=await identity.json();if(!list(env.ALLOWED_SPOTIFY_USERS).includes(user.id))throw fail('Spotify is connected, but recommendations are not enabled for your account. Copy your Spotify account ID from Preferences and send it to the app owner to add to the recommendation allowlist.',403);
+   if(developerUsage){if(!env.DEVELOPER_SPOTIFY_USER||user.id!==env.DEVELOPER_SPOTIFY_USER)throw fail('Developer access only.',403);if(!env.PROFILES)throw fail('Cloud storage is unavailable.',503);return reply({users:await profileUsage(env.PROFILES,list(env.ALLOWED_SPOTIFY_USERS))},200);}
    if(profileRequest){if(!env.PROFILES)throw fail('Cloud sync is not configured. Your local data is safe.',503);if(request.method==='GET')return reply(await readCloudProfile(env.PROFILES,user.id),200);const data=await boundedJson(request);if(Object.keys(data).some(k=>!['revision','profile'].includes(k)))throw fail('Invalid profile request.');const result=await writeCloudProfile(env.PROFILES,user.id,data.revision,data.profile);return reply(result,result.conflict?409:200);}
    const id=env.BUDGET.idFromName('checkthisout-global-budget-v1');
    const result=await env.BUDGET.get(id).fetch(new Request('https://budget.internal'+(checkingUsage?'/usage':checkingResult?'/result':'/recommend'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...input,userId:user.id})}));
    const response=await result.json();return reply(response,result.status);
-  }catch(error){return reply({error:error.status?error.message:profileRequest?'Cloud sync unavailable. Your local data is safe.':'Recommendation service unavailable. No automatic retry was made.'},error.status||503)}
+  }catch(error){return reply({error:error.status?error.message:developerUsage?'Usage data is unavailable.':profileRequest?'Cloud sync unavailable. Your local data is safe.':'Recommendation service unavailable. No automatic retry was made.'},error.status||503)}
  }
 }}
 export default createWorker();
