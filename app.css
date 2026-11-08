@@ -32,3 +32,5 @@ body{background:var(--bg);color:var(--ink)}header,main{max-width:1000px}header{b
 body[aria-busy="true"] button:disabled{cursor:progress}
 
 #cloud-storage summary{padding:8px 0;font-size:13px}#cloud-storage p{margin:6px 0;line-height:1.4}
+
+#report-issue{display:block;text-align:center;font-size:13px;padding:8px;border:1px solid var(--line);border-radius:6px;text-decoration:none}#report-issue:hover{color:var(--ink);background:var(--field)}
