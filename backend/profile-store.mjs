@@ -1,7 +1,8 @@
 const MAX_BYTES=8*1024*1024;
-const allowed=new Set(['version','preferences','batchSize','alsoLike','appName','theme','batches','tracks','ratings','keeps','recommendedIds','nukedIds','known','userKnown','requestLog','keepPlaylistId','keepNeedsSync']);
+const allowed=new Set(['version','preferences','batchSize','alsoLike','appName','theme','batches','tracks','ratings','keeps','recommendedIds','nukedIds','known','userKnown','requestLog','keepPlaylistId','keepNeedsSync','syncEdits']);
 export function validateCloudProfile(profile){
  if(!profile||typeof profile!=='object'||Array.isArray(profile)||Object.keys(profile).some(k=>!allowed.has(k))||profile.version!==1||!Array.isArray(profile.batches)||!Array.isArray(profile.keeps)||!profile.ratings||typeof profile.ratings!=='object'||Array.isArray(profile.ratings)||typeof profile.preferences!=='string')throw Object.assign(Error('Invalid cloud profile.'),{status:400});
+ if(profile.syncEdits!==undefined&&(!profile.syncEdits||typeof profile.syncEdits!=='object'||Array.isArray(profile.syncEdits)||Object.entries(profile.syncEdits).some(([k,v])=>k.length>500||typeof v!=='string'||!/^\d{16}:[0-9a-f-]{36}$/.test(v))))throw Object.assign(Error('Invalid sync metadata.'),{status:400});
  if(profile.batches.some(b=>!b||typeof b.id!=='string'||!Array.isArray(b.ids)||Object.keys(b).some(k=>!['id','created','ids','source','requestId','originalIds','spotifyId','spotifySaved','spotifyName','preferences'].includes(k))))throw Object.assign(Error('Invalid batch data.'),{status:400});
  if(new TextEncoder().encode(JSON.stringify(profile)).length>MAX_BYTES)throw Object.assign(Error('Profile exceeds the 8 MB cloud limit. Export a backup; the local copy is unchanged.'),{status:413});
  return profile;
