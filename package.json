@@ -7,7 +7,7 @@
     "start": "node server.cjs",
     "build": "node scripts/build.mjs",
     "test": "node --test backend/*.test.mjs history.test.mjs recommendations.test.mjs cloud-sync.test.mjs spotify-rate-limit.test.mjs",
-    "test:e2e": "node smoke-test.cjs && node spotify-test.cjs && node discovery-test.cjs && node history-open-test.cjs && node backup-test.cjs && node playlist-cache-test.cjs && node cloud-profile-test.cjs && node developer-usage-test.cjs",
+    "test:e2e": "node smoke-test.cjs && node spotify-test.cjs && node discovery-test.cjs && node history-open-test.cjs && node backup-test.cjs && node playlist-cache-test.cjs && node cloud-profile-test.cjs && node developer-usage-test.cjs && node spotify-diagnostic-test.cjs",
     "deploy": "node scripts/build.mjs && wrangler deploy --config wrangler.app.toml"
   },
   "devDependencies": {

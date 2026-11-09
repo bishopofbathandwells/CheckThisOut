@@ -117,3 +117,5 @@ Spotify 429 responses respect Retry-After. Without a reset time, the client back
 ## Developer usage
 
 The developer account sees Preferences ? Developer ? Usage: saved batch counts, latest batch and last cloud sync for each backend-allowlisted account, including accounts with no synced profile. This is synced activity, not visit tracking. No song lists or preferences are returned. GET /developer/usage verifies Spotify identity and requires it to match the explicit DEVELOPER_SPOTIFY_USER backend variable; unset means access is denied. The public developerSpotifyUserId setting controls UI visibility only. Loading the view is manual and makes no model request.
+
+Spotify browser connection failures show the operation and a sanitized endpoint. A diagnostic entry is stored with request logs and synced/backed up normally; no tokens, query strings, playlist IDs or song metadata are included. These entries appear in Show request details but do not count as model requests or model cost. A browser network failure can also mean a blocked/CORS response; it does not establish Spotify's HTTP status.
