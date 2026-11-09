@@ -25,3 +25,9 @@ test('edits made during an upload are retained for the next sync',async()=>{
  return {revision:upload};}});
  try{await c.sync();assert.equal(local.preferences,'during upload');await c.sync();assert.equal(remote.profile.preferences,'during upload');}finally{c.stop();}
 });
+
+test('artist bans combine across devices and removing a ban wins over a stale device',()=>{
+ const base={...blank(),excludedArtists:['First']};const a=structuredClone(base);a.excludedArtists.push('Second');a.syncEdits=stampProfileChanges(base,a,1000);
+ const b=structuredClone(base);b.excludedArtists=[];b.syncEdits=stampProfileChanges(base,b,2000);
+ const combined=mergeProfiles(a,b);assert.deepEqual(combined.excludedArtists,['Second']);assert.deepEqual(mergeProfiles(combined,a).excludedArtists,['Second']);
+});

@@ -149,3 +149,9 @@ test('ratings and keeps reach the model and are part of request identity',async(
    assert.equal((await s.worker.fetch(s.req('alice',input),s.env)).status,200);assert.equal(s.calls,1);
   }
  });
+
+test('excluded artists reach model instructions and change cached request identity',async()=>{
+ const s=setup(),input={requestId:crypto.randomUUID(),preferences:'soul',excludedArtists:['Blocked Artist']};
+ assert.equal((await s.worker.fetch(s.req('alice',input),s.env)).status,200);assert.deepEqual(JSON.parse(s.body.input).excluded_artists,['Blocked Artist']);assert(s.body.instructions.includes('including collaborations'));assert.equal((await s.worker.fetch(s.req('alice',{...input,excludedArtists:['Other']}),s.env)).status,409);
+ for(const invalid of [null,'Artist',[''],Array(501).fill('Artist')])assert.equal((await s.worker.fetch(s.req('alice',{...input,requestId:crypto.randomUUID(),excludedArtists:invalid}),s.env)).status,invalid===null?200:400);
+});

@@ -1,3 +1,4 @@
+import {normalizeArtist} from './discovery.js';
 export function canonicalProfile(value){if(Array.isArray(value))return '['+value.map(canonicalProfile).join(',')+']';if(value&&typeof value==='object')return '{'+Object.keys(value).filter(k=>value[k]!==undefined).sort().map(k=>JSON.stringify(k)+':'+canonicalProfile(value[k])).join(',')+'}';return JSON.stringify(value);}
 export function hasProfileData(p){return !!(p.batches?.length||p.keeps?.length||Object.keys(p.ratings||{}).length||p.requestLog?.length||p.preferences||p.appName&&p.appName!=='Hidden Gems'||p.theme&&p.theme!=='precision'||p.alsoLike===false);}
 // Only user-editable values need clocks; collections retain their stable IDs.
@@ -6,6 +7,7 @@ const key=(kind,id)=>JSON.stringify([kind,id]);
 const entries=p=>{
  const out=new Map(fields.map(f=>[key('field',f),p[f]]));
  for(const [id,value] of Object.entries(p.ratings||{}))out.set(key('rating',id),value);
+ for(const name of p.excludedArtists||[])out.set(key('excludedArtist',normalizeArtist(name)),name);
  for(const id of p.keeps||[])out.set(key('keep',id),true);
  for(const b of p.batches||[])out.set(key('batch',b.id),b);
  for(const r of p.requestLog||[])out.set(key('log',r.requestId),r);
@@ -35,6 +37,8 @@ export function mergeProfiles(local,remote){
  merged.keeps=union([...lk],[...rk]).filter(id=>pick('keep',id,lk.has(id)?true:undefined,rk.has(id)?true:undefined));
  for(const f of ['recommendedIds','nukedIds','keepNeedsSync'])merged[f]=union(local[f],remote[f]);
  merged.keepNeedsSync=merged.keepNeedsSync.filter(id=>merged.keeps.includes(id));
+ const la=new Map((local.excludedArtists||[]).map(a=>[normalizeArtist(a),a])),ra=new Map((remote.excludedArtists||[]).map(a=>[normalizeArtist(a),a]));
+ merged.excludedArtists=union([...la.keys()],[...ra.keys()]).map(id=>pick('excludedArtist',id,la.get(id),ra.get(id))).filter(Boolean);
  merged.tracks={...local.tracks,...remote.tracks};
  for(const f of ['known','userKnown']){const map=new Map();for(const t of [...(local[f]||[]),...(remote[f]||[])])map.set(t.uri||JSON.stringify([t.artist,t.title]),t);merged[f]=[...map.values()].sort((a,b)=>canonicalProfile(a).localeCompare(canonicalProfile(b)));}
  for(const [field,kind,idKey] of [['batches','batch','id'],['requestLog','log','requestId']]){

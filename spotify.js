@@ -64,7 +64,7 @@ export async function findTrack(track){
  const matches=result.tracks?.items?.filter(t=>normal(withoutCredits(t.name))===normal(withoutCredits(track.title))&&t.artists.some(a=>normal(a.name)===normal(track.artist))&&t.is_playable!==false)||[];
  const match=matches.find(t=>normal(t.name)===normal(track.title))||matches[0];
  if(!match)throw Error(`No exact Spotify match for “${track.title}” by ${track.artist}. Nothing was substituted.`);
- return {uri:match.uri,url:match.external_urls.spotify,title:match.name,artist:match.artists[0].name,isrc:match.external_ids?.isrc||null};
+ return {uri:match.uri,url:match.external_urls.spotify,title:match.name,artist:match.artists[0].name,artists:match.artists.map(a=>a.name),isrc:match.external_ids?.isrc||null};
 }
 async function findPlaylist(userId,marker){let offset=0;while(true){const data=await api(`/me/playlists?limit=20&offset=${offset}`);const match=data.items.find(p=>p&&p.owner?.id===userId&&p.description?.includes(marker));if(match)return match;if(!data.next)return null;offset+=data.items.length;if(!data.items.length)throw Error('Spotify returned an incomplete playlist list.');}}
 export async function ensurePlaylist(userId,marker,name,onCreated,savedId){
@@ -98,9 +98,9 @@ export async function knownTracks(){
 }
 export async function playlistContext({force=false}={}){if(force||Date.now()>=playlistContextExpires)playlistContextPromise=undefined;if(!playlistContextPromise){playlistContextExpires=Date.now()+24*60*60*1000;playlistContextPromise=loadPlaylistContext(api).catch(error=>{playlistContextPromise=undefined;throw error});}return playlistContextPromise;}
 export async function historyProbe(){return probeHistory(api)}
-export async function requestCandidates(endpoint,preferences,requestId,batchSize=5,playlistTracks,exclusions,feedback){
+export async function requestCandidates(endpoint,preferences,requestId,batchSize=5,playlistTracks,exclusions,feedback,excludedArtists){
  const url=new URL(endpoint);if(url.protocol!=='https:'&&!(url.protocol==='http:'&&url.hostname==='127.0.0.1'))throw Error('Recommendation service must use HTTPS.');
- const send=async force=>fetch(url,{method:'POST',signal:AbortSignal.timeout(110000),headers:{Authorization:`Bearer ${await accessToken(force)}`,'Content-Type':'application/json'},body:JSON.stringify({requestId,preferences,batchSize,...(playlistTracks?{playlistTracks}:{}),...(exclusions?{exclusions}:{}),...(feedback?{feedback}:{})})});
+ const send=async force=>fetch(url,{method:'POST',signal:AbortSignal.timeout(110000),headers:{Authorization:`Bearer ${await accessToken(force)}`,'Content-Type':'application/json'},body:JSON.stringify({requestId,preferences,batchSize,...(playlistTracks?{playlistTracks}:{}),...(exclusions?{exclusions}:{}),...(feedback?{feedback}:{}),...(excludedArtists?.length?{excludedArtists}:{})})});
  let response=await send(false);if(response.status===401)response=await send(true);
  const data=await response.json();if(!response.ok){const error=Error(data.error||'Recommendation request failed.');error.usage=data.usage||null;error.errorCode=data.errorCode;error.elapsedMs=data.elapsedMs;error.cached=!!data.cached;error.terminal=response.status===502||response.status===504||response.status===400;throw error;}
  if(!Array.isArray(data.songs)||data.songs.length!==Math.max(12,batchSize*2)||data.songs.some(t=>!t||typeof t.title!=='string'||typeof t.artist!=='string'||t.title.length>180||t.artist.length>180))throw Error('Recommendation service returned an invalid song list.');
@@ -113,7 +113,7 @@ export async function cachedCandidates(endpoint,requestId){const url=new URL(end
 export async function playlistName(id){const p=await api(`/playlists/${encodeURIComponent(id)}?fields=name`);if(typeof p?.name!=='string'||!p.name.trim())throw Error('Spotify did not return the playlist name.');return p.name;}
 
 export async function profileRequest(endpoint,method='GET',body,path='/profile'){const limit=storedThrottle();if(limit?.retryAt>Date.now())throw Error(spotifyThrottleMessage(limit));
- const url=new URL(endpoint);if(url.protocol!=='https:'&&!(url.protocol==='http:'&&url.hostname==='127.0.0.1'))throw Error('Cloud sync requires HTTPS.');url.pathname=url.pathname.replace(/\/recommend$/,path);url.search='';
+ const url=new URL(endpoint);if(url.protocol!=='https:'&&!(url.protocol==='http:'&&url.hostname==='127.0.0.1'))throw Error('Cloud sync requires HTTPS.');url.pathname=url.pathname.replace(/\/recommend$/,path);url.search=path==='/profile'?'artistExclusions=1':'';
  const send=async force=>fetch(url,{method,signal:AbortSignal.timeout(20000),headers:{Authorization:'Bearer '+await accessToken(force),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});let r=await send(false);if(r.status===401)r=await send(true);const data=await r.json();if(!r.ok&&r.status!==409)throw Error(data.error||'Cloud sync unavailable. Your local changes are safe.');return data;
 }
 

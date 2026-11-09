@@ -36,3 +36,8 @@ body[aria-busy="true"] button:disabled{cursor:progress}
 #report-issue{display:block;text-align:center;font-size:13px;padding:8px;border:1px solid var(--line);border-radius:6px;text-decoration:none}#report-issue:hover{color:var(--ink);background:var(--field)}
 
 #developer-tools summary{padding:8px 0;font-size:13px}#developer-usage-results{overflow-x:auto}#developer-usage-results table{width:100%;border-collapse:collapse;font-size:11px}#developer-usage-results th,#developer-usage-results td{text-align:left;padding:7px 5px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}#developer-usage-status{line-height:1.4}
+
+/* Two existing action rows: Keep above Song/Artist, never a third row. */
+.song-actions{display:grid;grid-template-columns:auto auto;gap:5px}.song-actions .keep{grid-column:1 / -1;grid-row:auto}.song-actions .remove-song{min-width:0;padding-inline:7px}.track-info{min-width:0}.track-info .title,.track-info .artist{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.discovery-label{display:flex;align-items:center;justify-content:space-between;gap:6px}#preferences .discovery-label label{margin:0}.discovery-label .quiet{padding:0;font-size:12px}#excluded-artists-dialog label{display:block;margin:12px 0 8px}
+@media(max-width:640px){[data-theme=studio] .song-actions{display:flex;flex-direction:row;gap:4px}[data-theme=studio] .song-actions .keep{min-width:36px;padding:7px 4px;font-size:10px}[data-theme=studio] .song-actions .remove-artist:after{content:none}[data-theme=studio] .song-actions .remove-artist{padding:8px 5px;font-size:10px}}

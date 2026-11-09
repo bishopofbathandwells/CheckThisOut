@@ -28,3 +28,20 @@ test('developer usage is owner-only and returns counts without listening or prof
   assert(!JSON.stringify(data).includes('Private'));assert(!JSON.stringify(data).includes('preference'));
  }finally{db.close()}
 });
+
+test('cloud profiles preserve artist exclusions and reject malformed lists',async()=>{const db=database();try{const p={...profile(),excludedArtists:['Artist A','Artist B']};await writeCloudProfile(db,'a',0,p);assert.deepEqual((await readCloudProfile(db,'a')).profile.excludedArtists,p.excludedArtists);for(const excludedArtists of ['artist',[''],Array(501).fill('artist')])assert.throws(()=>validateCloudProfile({...profile(),excludedArtists}));}finally{db.close()}});
+
+test('older app clients cannot erase artist bans or enter a sync loop on unknown fields',async()=>{
+ const db=database();try{
+  await writeCloudProfile(db,'alice',0,{...profile(),excludedArtists:['Blocked']});
+  const worker=createWorker(async()=>Response.json({id:'alice'})),env={PROFILES:db,ALLOWED_ORIGINS:'https://app.test',ALLOWED_SPOTIFY_USERS:'alice'};
+  const req=(method='GET',body,modern=false)=>new Request('https://backend/profile'+(modern?'?artistExclusions=1':''),{method,headers:{Origin:'https://app.test',Authorization:'Bearer alice',...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
+  assert(!('excludedArtists' in (await (await worker.fetch(req(),env)).json()).profile));
+  assert.deepEqual((await (await worker.fetch(req('GET',null,true),env)).json()).profile.excludedArtists,['Blocked']);
+  assert.equal((await worker.fetch(req('PUT',{revision:1,profile:profile()}),env)).status,200);
+  assert.deepEqual((await readCloudProfile(db,'alice')).profile.excludedArtists,['Blocked']);
+  const conflict=await (await worker.fetch(req('PUT',{revision:1,profile:profile()}),env)).json();assert(conflict.conflict);assert(!('excludedArtists' in conflict.profile));
+  assert.equal((await worker.fetch(req('PUT',{revision:2,profile:{...profile(),excludedArtists:[]}},true),env)).status,200);
+  assert.deepEqual((await readCloudProfile(db,'alice')).profile.excludedArtists,[]);
+ }finally{db.close()}
+});
