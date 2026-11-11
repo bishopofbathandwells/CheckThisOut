@@ -57,7 +57,7 @@ pnpm build
 ## Recommendation context and known limitations
 
 - Accessible Spotify playlist titles/artists are sampled (up to 200 tracks) as taste context; known songs and past recommendations are sent as exclusions. User consented to this metadata being sent to OpenAI. Do not silently add new data categories.
-- Playlist context loads on the first recommendation request and is cached per account in IndexedDB for 24 hours, surviving reload and reopening; no manual refresh button. Liked Songs and recent listening are fetched on every recommendation request. Cache is excluded from backup exports. This is not a complete lifetime listening history. Spotify recent plays were unexpectedly incomplete for this account; user accepted that limitation.
+- Playlist context loads on the first recommendation request and is cached per account in IndexedDB for 7 days, surviving reload and reopening; no manual refresh button. Liked Songs/recent listening and song searches have device-only 24-hour caches; writes and playlist write verification remain fresh. Cache is excluded from backup exports. This is not a complete lifetime listening history. Spotify recent plays were unexpectedly incomplete for this account; user accepted that limitation.
 - Ratings and Keeps now guide model recommendations: up to 100 title/artist pairs with scores/Keep flags. 4-5 positive, 1-2 negative, 3 neutral. Remove is exclusion only.
 - Backend model is configured by OPENAI_MODEL; the last deployment used gpt-6-luna with low reasoning effort. Provider timeout 90s; client timeout 110s. Verify code/config before changing.
 - The model can ignore exclusions; deterministic client filtering remains authoritative. Match Spotify IDs/URIs, ISRC and normalized title/artist; preserve Unicode and alternate-release handling. Never promise complete novelty from model instructions alone.
@@ -83,7 +83,7 @@ Update this guide and README when behaviour or deployment changes. Do not claim 
 
 Playlist context preloads asynchronously after successful Spotify connection (including a restored signed-in session). Recommendation generation joins any in-flight load, avoiding duplicate reads. Fresh per-account disk caches survive disconnect/reconnect. Prefetch failure is retried on demand; it does not block sign-in or make model calls.
 
-- Disconnect shows the latest Spotify account’s saved batches read-only with a disconnected label. Spotify profiles and their 24-hour playlist caches remain separate. Tests use mock signed-in profiles for legacy data.
+- Disconnect shows the latest Spotify account’s saved batches read-only with a disconnected label. Spotify profiles and their 7-day playlist caches remain separate. Tests use mock signed-in profiles for legacy data.
 
 Disconnected users can browse the most recently used Spotify profile as a clearly labelled read-only preview. Rating/Keep/Remove/import and Spotify writes require reconnecting. A fresh browser still shows Connect Spotify; legacy demo profiles are not used for the preview. Per-account data and caches remain separate.
 
@@ -92,3 +92,7 @@ D1: binding PROFILES / database checkthisout-profiles. Migrations in backend/mig
 Developer usage: GET /developer/usage is restricted to DEVELOPER_SPOTIFY_USER after Spotify verification and allowlist checking; fails closed when unset. Returns only userId, saved batch count, latest batch date and last sync for allowlisted accounts. Frontend developerSpotifyUserId controls Preferences ? Developer visibility only. Keep these IDs aligned; no model calls or automatic polling.
 
 Artist exclusions: profile.excludedArtists (max 500 names) is synced/backed up and sent as excludedArtists to /recommend. The model receives excluded_artists; selectDiscoveries filters normalized names before lookup and all available Spotify artist credits after matching. Artist removal affects the current batch and its saved Spotify playlist only; existing keeps/other batches are retained. Preferences artist editor shares the Discovery preferences label row. Keep song rows at their measured pre-change height; artist-test.cjs covers all themes, widths 320?1280 and retry-safe saved playlist removal.
+
+Playlist fallback: playlistReadProxyEnabled is enabled. Deploy the backend endpoint before publishing the frontend. Browser playlist GET failures can use /spotify/playlist-items, which verifies account access and proxies a fixed Spotify host/path with bounded pagination and no redirects. No arbitrary URL/method proxy and no model calls. Test with backend/playlist-proxy.test.mjs and playlist-proxy-test.cjs.
+
+Cache limits: playlists 7 days, 1,000 unique tracks, 200 rows per playlist, 100 sampled playlists, 20 playlist-list pages and 100 track pages. History/search caches use SpotifyReadCache in history.js with per-account cache:spotify:<id> records in the existing IndexedDB profile store, separate from cloud/backup projection. Search cache max 500 successful match/no-match results; errors are not cached. Active Spotify cooldown blocks model spending. Tests: history.test.mjs and spotify-read-cache-test.cjs.

@@ -9,3 +9,6 @@ export const cloudSyncEnabled=true;
 
 // UI visibility only; the backend independently verifies developer identity.
 export const developerSpotifyUserId='31hl4wz7lmymikmroghaxqpeel7y';
+
+// Fallback for playlist item reads when the browser cannot read Spotify directly.
+export const playlistReadProxyEnabled=true;

@@ -1,10 +1,14 @@
+import * as config from './config.js';
 import {spotifyThrottle,spotifyThrottleMessage} from './spotify-rate-limit.js';
 // Public application identifier. PKCE deliberately requires no client secret.
-import {loadKnownTracks,probeHistory,loadPlaylistContext} from './history.js';
+import {loadKnownTracks,probeHistory,loadPlaylistContext,PLAYLIST_CACHE_TTL_MS,SpotifyReadCache} from './history.js';
 const CLIENT_ID='4f83f3ad82254f3e9e8ab374f04b146b';
 const AUTH_KEY='cto-spotify-session',PENDING_KEY='cto-spotify-pkce';
 const SCOPES='playlist-modify-private playlist-read-private playlist-read-collaborative user-library-modify user-library-read user-read-recently-played';
-let refreshPromise,playlistContextPromise,playlistContextExpires=0,diagnosticHandler;
+let refreshPromise,playlistContextPromise,playlistContextExpires=0,diagnosticHandler,readCache;
+let searchRequests=0;
+export const searchRequestCount=()=>searchRequests;
+export function configureReadCache(options){readCache=options?new SpotifyReadCache(options):undefined;}
 export function setDiagnosticHandler(handler){diagnosticHandler=handler;}
 function requestDescription(path,method){
  const endpoint=path.split('?')[0].replace(/(\/playlists\/)[^/]+/,'$1:id');
@@ -15,7 +19,7 @@ function requestDescription(path,method){
 const read=key=>{try{return JSON.parse(sessionStorage.getItem(key)||'null')}catch{return null}};
 const base64=bytes=>btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
 const random=()=>base64(crypto.getRandomValues(new Uint8Array(48)));
-export function disconnect(){playlistContextPromise=undefined;sessionStorage.removeItem(AUTH_KEY);sessionStorage.removeItem(PENDING_KEY)}
+export function disconnect(){readCache=undefined;playlistContextPromise=undefined;sessionStorage.removeItem(AUTH_KEY);sessionStorage.removeItem(PENDING_KEY)}
 export async function connect(){
  const verifier=random(),state=random(),redirect=new URL(location.hostname.endsWith('.github.io')?'callback.html':'callback',new URL('./',location.href)).href;
  const challenge=base64(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier))));
@@ -44,17 +48,38 @@ async function accessToken(force=false){let session=read(AUTH_KEY);if(!session)t
  refreshPromise ||= tokenRequest({grant_type:'refresh_token',refresh_token:session.refresh_token},session).finally(()=>{refreshPromise=undefined});session=await refreshPromise;}return session.access_token;
 }
 function storedThrottle(){try{return JSON.parse(localStorage.getItem('cto-spotify-throttle')||'null')}catch{return null}}
+function playlistProxyInput(path,method){
+ if(!config.playlistReadProxyEnabled||!config.recommendationEndpoint||method!=='GET')return null;
+ const url=new URL(path,'https://api.spotify.com'),match=url.pathname.match(/^\/playlists\/([a-zA-Z0-9]{22})\/items$/);if(!match)return null;
+ if([...url.searchParams.keys()].some(k=>!['limit','offset'].includes(k)))return null;
+ return {playlistId:match[1],limit:url.searchParams.get('limit')||'50',offset:url.searchParams.get('offset')||'0'};
+}
+async function playlistProxyRead(input,token){
+ const url=new URL(config.recommendationEndpoint);if(url.protocol!=='https:'&&!(url.protocol==='http:'&&url.hostname==='127.0.0.1'))throw Error('Playlist fallback requires HTTPS.');url.pathname=url.pathname.replace(/\/recommend$/,'/spotify/playlist-items');url.search=new URLSearchParams(input);
+ let response,data;try{response=await fetch(url,{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(22000)});data=await response.json();}catch{throw Error('The playlist fallback could not be reached. Check your connection and try again later.');}
+ if(!response.ok){if(response.status===429&&data.retryAt){try{localStorage.setItem('cto-spotify-throttle',JSON.stringify({reason:'rate',provided:true,retryAt:data.retryAt}))}catch{}}throw Object.assign(Error(typeof data.error==='string'?data.error:'Playlist fallback is unavailable.'),{errorCode:'SPOTIFY_PROXY_ERROR'});}
+ if(!data.spotifyProxy||!Number.isInteger(data.spotifyStatus)||!(data.spotifyStatus===200||data.spotifyStatus>=400&&data.spotifyStatus<=599)||!data.body||typeof data.body!=='object')throw Error('The playlist fallback returned an invalid response.');
+ return new Response(JSON.stringify(data.body),{status:data.spotifyStatus,headers:{'Content-Type':'application/json',...(data.retryAfter?{'Retry-After':data.retryAfter}:{})}});
+}
+async function reportDiagnostic(detail){try{await diagnosticHandler?.(detail)}catch{}}
 export async function api(path,{method='GET',body}={},retried=false){
  const previousLimit=storedThrottle();if(previousLimit?.retryAt>Date.now())throw Object.assign(Error(spotifyThrottleMessage(previousLimit)),{status:429,retryAt:previousLimit.retryAt});
  const token=await accessToken();let response;
- try{response=await fetch('https://api.spotify.com/v1'+path,{method,headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})})}catch{const detail=requestDescription(path,method),errorCode='SPOTIFY_NETWORK_ERROR';try{await diagnosticHandler?.({errorCode,spotifyMethod:method,spotifyEndpoint:detail.endpoint,spotifyOperation:detail.operation})}catch{};throw Object.assign(Error(`The browser could not reach Spotify while ${detail.operation} (${method} ${detail.endpoint}). This may be a network problem or a browser-blocked response. No automatic retry was made.`),{errorCode});}
+ const proxyInput=playlistProxyInput(path,method);if(method==='GET'&&path.split('?')[0]==='/search')searchRequests++;
+ try{response=await fetch('https://api.spotify.com/v1'+path,{method,headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),...(proxyInput?{signal:AbortSignal.timeout(15000)}:{})})}catch{
+  const detail=requestDescription(path,method);
+  if(proxyInput){
+   try{response=await playlistProxyRead(proxyInput,token);}catch(error){await reportDiagnostic({errorCode:'SPOTIFY_PROXY_ERROR',spotifyMethod:method,spotifyEndpoint:detail.endpoint,spotifyOperation:detail.operation,spotifyVia:'backend'});throw error;}
+   await reportDiagnostic({errorCode:response.ok?'SPOTIFY_NETWORK_RECOVERED':'SPOTIFY_PLAYLIST_HTTP_ERROR',spotifyMethod:method,spotifyEndpoint:detail.endpoint,spotifyOperation:detail.operation,spotifyVia:'backend',spotifyStatus:response.status});
+  }else{const errorCode='SPOTIFY_NETWORK_ERROR';await reportDiagnostic({errorCode,spotifyMethod:method,spotifyEndpoint:detail.endpoint,spotifyOperation:detail.operation});throw Object.assign(Error(`The browser could not reach Spotify while ${detail.operation} (${method} ${detail.endpoint}). This may be a network problem or a browser-blocked response. No automatic retry was made.`),{errorCode});}
+ }
  if(response.status===401&&!retried){await accessToken(true);return api(path,{method,body},true)}
  if(response.status===429){const limit=await spotifyThrottle(response,Date.now(),previousLimit&&Date.now()-previousLimit.retryAt<900000?(previousLimit.attempt||0)+1:1);try{localStorage.setItem('cto-spotify-throttle',JSON.stringify(limit))}catch{};throw Object.assign(Error(spotifyThrottleMessage(limit)),{status:429,retryAt:limit.retryAt});}
  if(!response.ok){if([403,404].includes(response.status))throw Object.assign(Error(response.status===403?(path==='/me'?'Spotify denied account access. Ask the app owner to check your Spotify email is on the Spotify app user list and their Premium subscription is active. Then reconnect.':path.startsWith('/playlists/')?'Spotify denied access to this playlist. It may not be accessible to this account or the app may lack playlist permissions.':'Spotify denied this action. Ask the app owner to check Spotify app access for your account; reconnect if permissions changed.'):'Spotify item is unavailable.'),{status:response.status});throw Error(`Spotify request failed (${response.status}). Retry the action after checking your connection.`)}
  const text=await response.text();return text?JSON.parse(text):null;
 }
 export async function currentUser(){const user=await api('/me');if(!user.id)throw Error('Spotify did not identify this account.');return user}
-export async function findTrack(track){
+async function searchTrack(track){
  const q=`track:"${track.title}" artist:"${track.artist}"`;
  const result=await api('/search?'+new URLSearchParams({q,type:'track',limit:'5'}));
  const normal=s=>s.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/&/g,' and ').replace(/[^\p{L}\p{N}]/gu,'');
@@ -63,8 +88,15 @@ export async function findTrack(track){
  const withoutCredits=s=>s.replace(/\s*[([]\s*(?:feat\.?|ft\.?|featuring|with)\s+[^)\]]+[)\]]\s*$/i,'').replace(/\s*[-–]\s*(?:feat\.?|ft\.?|featuring)\s+.+$/i,'').trim();
  const matches=result.tracks?.items?.filter(t=>normal(withoutCredits(t.name))===normal(withoutCredits(track.title))&&t.artists.some(a=>normal(a.name)===normal(track.artist))&&t.is_playable!==false)||[];
  const match=matches.find(t=>normal(t.name)===normal(track.title))||matches[0];
- if(!match)throw Error(`No exact Spotify match for “${track.title}” by ${track.artist}. Nothing was substituted.`);
+ if(!match)return null;
+
  return {uri:match.uri,url:match.external_urls.spotify,title:match.name,artist:match.artists[0].name,artists:match.artists.map(a=>a.name),isrc:match.external_ids?.isrc||null};
+}
+export async function findTrack(track){
+ const key='search:'+JSON.stringify([track.artist.normalize('NFC').trim().toLowerCase(),track.title.normalize('NFC').trim().toLowerCase()]);
+ const valid=value=>value===null||value&&typeof value.uri==='string'&&typeof value.title==='string'&&typeof value.artist==='string';
+ const match=readCache?await readCache.get(key,()=>searchTrack(track),valid):await searchTrack(track);
+ if(!match)throw Error(`No exact Spotify match for "${track.title}" by ${track.artist}. Nothing was substituted.`);return match;
 }
 async function findPlaylist(userId,marker){let offset=0;while(true){const data=await api(`/me/playlists?limit=20&offset=${offset}`);const match=data.items.find(p=>p&&p.owner?.id===userId&&p.description?.includes(marker));if(match)return match;if(!data.next)return null;offset+=data.items.length;if(!data.items.length)throw Error('Spotify returned an incomplete playlist list.');}}
 export async function ensurePlaylist(userId,marker,name,onCreated,savedId){
@@ -94,11 +126,13 @@ export async function keepTrack(id,uri){
 export async function likeTrack(uri){await api('/me/library?'+new URLSearchParams({uris:uri}),{method:'PUT'})}
 
 export async function knownTracks(){
- return loadKnownTracks(api);
+ const valid=data=>data&&Array.isArray(data.tracks)&&Array.isArray(data.savedSongs)&&Array.isArray(data.recentPlays)&&data.coverage&&[...data.tracks,...data.savedSongs,...data.recentPlays].every(t=>t&&typeof t.title==='string'&&typeof t.artist==='string');
+ return readCache?readCache.get('history',()=>loadKnownTracks(api),valid):loadKnownTracks(api);
 }
-export async function playlistContext({force=false}={}){if(force||Date.now()>=playlistContextExpires)playlistContextPromise=undefined;if(!playlistContextPromise){playlistContextExpires=Date.now()+24*60*60*1000;playlistContextPromise=loadPlaylistContext(api).catch(error=>{playlistContextPromise=undefined;throw error});}return playlistContextPromise;}
+export async function playlistContext({force=false}={}){if(force||Date.now()>=playlistContextExpires)playlistContextPromise=undefined;if(!playlistContextPromise){playlistContextExpires=Date.now()+PLAYLIST_CACHE_TTL_MS;playlistContextPromise=loadPlaylistContext(api).catch(error=>{playlistContextPromise=undefined;throw error});}return playlistContextPromise;}
 export async function historyProbe(){return probeHistory(api)}
 export async function requestCandidates(endpoint,preferences,requestId,batchSize=5,playlistTracks,exclusions,feedback,excludedArtists){
+ const throttle=storedThrottle();if(throttle?.retryAt>Date.now())throw Object.assign(Error(spotifyThrottleMessage(throttle)),{status:429,errorCode:'SPOTIFY_COOLDOWN'});
  const url=new URL(endpoint);if(url.protocol!=='https:'&&!(url.protocol==='http:'&&url.hostname==='127.0.0.1'))throw Error('Recommendation service must use HTTPS.');
  const send=async force=>fetch(url,{method:'POST',signal:AbortSignal.timeout(110000),headers:{Authorization:`Bearer ${await accessToken(force)}`,'Content-Type':'application/json'},body:JSON.stringify({requestId,preferences,batchSize,...(playlistTracks?{playlistTracks}:{}),...(exclusions?{exclusions}:{}),...(feedback?{feedback}:{}),...(excludedArtists?.length?{excludedArtists}:{})})});
  let response=await send(false);if(response.status===401)response=await send(true);

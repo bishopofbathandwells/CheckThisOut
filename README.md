@@ -94,7 +94,7 @@ Preferences also includes an app name (Hidden Gems / What a Find / Check This Ou
 
 Signed-out users start with Connect Spotify. No sample recommendation batches are generated. Existing legacy batches remain readable and restorable.
 
-Spotify playlist context is cached on this device per account for 24 hours, surviving reloads and app reopening. It refreshes automatically on the next recommendation request after expiry; there is no refresh button. Recent plays and Liked Songs are still checked on every request.
+Spotify playlist context is cached on this device per account for 7 days, surviving reloads and app reopening. It refreshes automatically on the next recommendation request after expiry; there is no refresh button. Recent plays, Liked Songs and song search results use a separate 24-hour cache.
 
 Playlist context preloads asynchronously after successful Spotify connection (including a restored signed-in session). Recommendation generation joins any in-flight load, avoiding duplicate reads. Fresh per-account disk caches survive disconnect/reconnect. Prefetch failure is retried on demand; it does not block sign-in or make model calls.
 
@@ -125,3 +125,15 @@ Spotify browser connection failures show the operation and a sanitized endpoint.
 Each batch row has an Artist button beside Remove. After confirmation it excludes the primary artist from future recommendations and removes that artist's credited songs from the current batch, including its Spotify playlist when saved. Other batches, keeps and Liked Songs are unchanged. A failed Spotify removal can be retried; the artist exclusion remains saved. Preferences ? Excluded artists (beside Discovery preferences) edits the list, one name per line, up to 500 artists. Deleting a name allows future songs again; previously removed/recommended songs remain excluded. Artist exclusions are sent to the model and enforced before/after Spotify matching, with normalized full artist names and all available Spotify credits. They sync per artist, survive backups/imports and reset pending request identity when changed. The compact action layout retains existing row heights across all themes.
 
 Artist-aware cloud reads use /profile?artistExclusions=1. The backend hides the new field from older clients and preserves stored artist exclusions when an older client writes a profile without it. This avoids accidental deletion and unknown-field sync loops during updates.
+
+## Playlist-read fallback
+
+The playlist-read fallback is enabled via playlistReadProxyEnabled. Only GET /playlists/<22-character Spotify ID>/items reads with limit/offset can fall back after a browser network failure or 15-second read timeout. Readable Spotify errors and all writes remain direct. The authenticated GET /spotify/playlist-items endpoint verifies the user allowlist, accepts bounded pagination, fixes the upstream host/path and disables redirects. It returns minimum track metadata or the actual sanitized Spotify status/Retry-After; it does not invoke the model or store tokens/playlist contents. Diagnostics record sanitized endpoint, route and status. Spotify permissions/quotas still apply.
+
+Local checks: node --test backend/playlist-proxy.test.mjs and node playlist-proxy-test.cjs. The latter runs a real local Worker HTTP adapter with controlled Spotify responses and an isolated browser. It covers recovery, skipped 403 playlists, quota cooldown, denied backend access, unavailable upstream, direct success and non-proxied writes. These are controlled tests, not verification against McHumph's live account.
+
+## Spotify cache limits
+
+Playlist snapshots last 7 days. A refresh collects up to 1,000 unique tracks, at most 200 rows per playlist, with round-robin pages so one large playlist cannot dominate. It samples at most 100 playlists, limits playlist-list reads to 20 pages and track reads to 100 pages, and still sends at most 200 taste examples to the model. Coverage can be partial; previously archived known/recommended/removed tracks remain excluded.
+
+Liked Songs plus recent listening are cached together for 24 hours. Song searches cache exact matched metadata or a successful no-match result for 24 hours, up to 500 search entries. Network/HTTP errors are never cached. Device-only IndexedDB records use cache:spotify:<accountId>, persist through reload/reconnect and stay isolated by account. They are excluded from cloud profiles and backup exports. Spotify write operations and playlist write verification remain uncached. Active Spotify cooldowns stop new model requests even when library data is cached. Recent listening can be up to 24 hours stale; app-generated recommendation/removal exclusions remain immediate. No new UI or refresh button.

@@ -34,27 +34,48 @@ export async function probeHistory(api){
 
 // Read accessible saved playlists; send only a balanced, bounded metadata sample.
 export async function loadPlaylistContext(api){
- const playlists=[],seen=new Set();let offset=0;
- while(true){const page=await api(`/me/playlists?limit=50&offset=${offset}`);if(!Array.isArray(page.items))throw Error('Spotify returned an invalid playlist list.');let added=0;for(const p of page.items){if(!p?.id||seen.has(p.id))continue;seen.add(p.id);added++;if(!/^CheckThisOut\b/i.test(p.name||'')&&!/\[cto-(?:batch|keep):/i.test(p.description||''))playlists.push(p)}if(!page.next)break;if(!added)throw Error('Spotify repeated a playlist page. Try again.');offset+=page.items.length;}
- const pools=[],tracks=[];let readable=0,unavailable=0;
- for(const playlist of playlists){const pool=[],seenTracks=new Set();let start=0;
-  while(true){let page;try{page=await api(`/playlists/${encodeURIComponent(playlist.id)}/items?limit=50&offset=${start}`)}catch(error){if([403,404].includes(error.status)){unavailable++;break}throw error}
-   if(!Array.isArray(page.items))throw Error('Spotify returned an invalid playlist page.');let added=0;
-   for(const item of page.items){const t=item?.item||item?.track;if(!t?.name||t.type==='episode'||t.is_local||!t.artists?.[0]?.name)continue;const key=t.uri||`${t.artists[0].name}|${t.name}`;if(seenTracks.has(key))continue;seenTracks.add(key);added++;const track={uri:t.uri||null,title:t.name,artist:t.artists[0].name,artists:t.artists.map(a=>a.name),isrc:t.external_ids?.isrc||null};pool.push(track);tracks.push(track)}
-   if(!page.next){readable++;break}if(!page.items.length)throw Error('Spotify returned an incomplete playlist. Try again.');start+=page.items.length;if(start>100000)throw Error('Playlist is too large to finish reading.');
-  }
-  if(pool.length)pools.push(pool);
+ const playlists=[],seen=new Set();let offset=0,listPages=0,playlistListLimited=false;
+ while(true){listPages++;const page=await api(`/me/playlists?limit=50&offset=${offset}`);if(!Array.isArray(page.items))throw Error('Spotify returned an invalid playlist list.');let added=0;for(const p of page.items){if(!p?.id||seen.has(p.id))continue;seen.add(p.id);added++;if(!/^CheckThisOut\b/i.test(p.name||'')&&!/\[cto-(?:batch|keep):/i.test(p.description||''))playlists.push(p)}if(!page.next)break;if(!added)throw Error('Spotify repeated a playlist page. Try again.');if(listPages>=20){playlistListLimited=true;break}offset+=page.items.length;}
+ const chosen=playlists.length<=MAX_CONTEXT_PLAYLISTS?playlists:Array.from({length:MAX_CONTEXT_PLAYLISTS},(_,i)=>playlists[Math.floor(i*playlists.length/MAX_CONTEXT_PLAYLISTS)]);
+ const queue=chosen.map(playlist=>({playlist,pool:[],seen:new Set(),offset:0,rows:0})),pools=queue.map(x=>x.pool),unique=new Map();let readable=0,unavailable=0,trackPages=0,rowsLoaded=0,limited=playlists.length>chosen.length||playlistListLimited;
+ // One page per playlist per pass keeps the capped sample balanced.
+ while(queue.length&&unique.size<MAX_PLAYLIST_TRACKS&&trackPages<MAX_PLAYLIST_TRACK_PAGES){
+  const task=queue.shift(),limit=Math.min(50,MAX_TRACKS_PER_PLAYLIST-task.rows,MAX_PLAYLIST_TRACKS-unique.size);let page;trackPages++;
+  try{page=await api(`/playlists/${encodeURIComponent(task.playlist.id)}/items?limit=${limit}&offset=${task.offset}`)}catch(error){if([403,404].includes(error.status)){unavailable++;continue}throw error}
+  if(!Array.isArray(page.items))throw Error('Spotify returned an invalid playlist page.');
+  const items=page.items.slice(0,limit);task.rows+=items.length;rowsLoaded+=items.length;
+  for(const item of items){const t=item?.item||item?.track;if(!t?.name||t.type==='episode'||t.is_local||!t.artists?.[0]?.name)continue;const key=t.uri||`${t.artists[0].name}|${t.name}`;if(task.seen.has(key))continue;task.seen.add(key);const track={uri:t.uri||null,title:t.name,artist:t.artists[0].name,artists:t.artists.map(a=>a.name),isrc:t.external_ids?.isrc||null};task.pool.push(track);if(!unique.has(key))unique.set(key,track);}
+  if(!page.next){readable++;continue}
+  if(!items.length)throw Error('Spotify returned an incomplete playlist. Try again.');task.offset+=items.length;
+  if(task.rows>=MAX_TRACKS_PER_PLAYLIST)limited=true;else queue.push(task);
  }
+ if(queue.length)limited=true;
+ const tracks=[...unique.values()];
  // Each playlist contributes across its length; a large first playlist cannot dominate.
  const samples=pools.map(pool=>Array.from({length:Math.min(200,pool.length)},(_,i)=>pool[Math.floor(i*pool.length/Math.min(200,pool.length))]));
  const playlistTracks=[],names=new Set();for(let row=0;row<200&&playlistTracks.length<200;row++)for(const pool of samples){const t=pool[row];if(!t)continue;const title=t.title.slice(0,120).trim(),artist=t.artist.slice(0,120).trim(),key=`${artist.toLowerCase()}|${title.toLowerCase()}`;if(!names.has(key)){names.add(key);playlistTracks.push({title,artist});if(playlistTracks.length===200)break}}
- return {playlistTracks,tracks:mergeKnown([],tracks),readable,unavailable};
+ return {playlistTracks,tracks,readable,unavailable,limited,trackPages,rowsLoaded,playlistsSeen:playlists.length};
 }
 
-export const PLAYLIST_CACHE_TTL_MS=24*60*60*1000;
+export const PLAYLIST_CACHE_TTL_MS=7*24*60*60*1000;
+export const MAX_PLAYLIST_TRACKS=1000,MAX_TRACKS_PER_PLAYLIST=200,MAX_CONTEXT_PLAYLISTS=100,MAX_PLAYLIST_TRACK_PAGES=100;
+export const READ_CACHE_TTL_MS=24*60*60*1000;
 export function cachedPlaylistContext(cache,accountId,now=Date.now()){
  const song=t=>t&&typeof t.title==='string'&&typeof t.artist==='string';
  if(!cache||cache.version!==1||cache.accountId!==accountId||!Number.isFinite(cache.fetchedAt)||now<cache.fetchedAt||now-cache.fetchedAt>=PLAYLIST_CACHE_TTL_MS)return null;
  const data=cache.data;if(!data||!Array.isArray(data.tracks)||!data.tracks.every(song)||!Array.isArray(data.playlistTracks)||data.playlistTracks.length>200||!data.playlistTracks.every(song))return null;
- return data;
+ return data.tracks.length>MAX_PLAYLIST_TRACKS?{...data,tracks:data.tracks.slice(0,MAX_PLAYLIST_TRACKS),limited:true}:data;
+}
+
+// Device-only, per-account cache. Failures are never cached; writes are serialized.
+export class SpotifyReadCache{
+ constructor({accountId,load,save,now=Date.now}){Object.assign(this,{accountId,load,save,now});this.entries={};this.pending=new Map();this.writes=Promise.resolve();}
+ async ready(){if(!this.loading)this.loading=(async()=>{try{const saved=await this.load();if(saved?.version===1&&saved.accountId===this.accountId&&saved.entries&&typeof saved.entries==='object'&&!Array.isArray(saved.entries))this.entries=saved.entries;}catch{}this.prune();})();await this.loading;}
+ fresh(entry){const age=this.now()-entry?.fetchedAt;return Number.isFinite(age)&&age>=0&&age<READ_CACHE_TTL_MS;}
+ prune(){for(const [key,entry] of Object.entries(this.entries))if(!this.fresh(entry))delete this.entries[key];const searches=Object.keys(this.entries).filter(k=>k!=='history').sort((a,b)=>this.entries[a].fetchedAt-this.entries[b].fetchedAt);for(const key of searches.slice(0,Math.max(0,searches.length-500)))delete this.entries[key];}
+ async get(key,loader,valid){
+  await this.ready();const cached=this.entries[key];if(this.fresh(cached)&&valid(cached.value))return structuredClone(cached.value);
+  if(!this.pending.has(key)){const task=(async()=>{const value=await loader();if(!valid(value))return value;this.entries[key]={fetchedAt:this.now(),value:structuredClone(value)};this.prune();this.writes=this.writes.then(()=>this.save({version:1,accountId:this.accountId,entries:structuredClone(this.entries)})).catch(()=>{});await this.writes;return value;})().finally(()=>this.pending.delete(key));this.pending.set(key,task);}
+  return structuredClone(await this.pending.get(key));
+ }
 }
